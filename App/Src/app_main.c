@@ -1,0 +1,197 @@
+/******************************************************************************
+ * Application MAIN
+ *
+ * Generic, non-application-specific skeleton:
+ *   - startup banner
+ *   - NVM parameter pool (nvmparams)
+ *   - job queue + dispatcher (v_process_next_job)
+ *   - 10 ms periodic-interrupt service
+ *   - console debug menu
+ *
+ * Add application code on top of this base; nothing here is tied to a
+ * particular product.
+ ******************************************************************************/
+
+/*============================================================================
+ * INCLUDES
+ *==========================================================================*/
+
+#include "device_config.h"          /* stdint/stdio, main.h, macros.h, globals.h */
+#include "tim.h"                     /* PERIODIC_INT_TIMER_HANDLE (htim6) */
+#include "utils.h"
+#include "jobs.h"
+#include "nvmparams.h"
+#include "debug_menu.h"
+
+/*============================================================================
+ * STARTUP BANNER
+ *==========================================================================*/
+
+void v_print_startup_banner(void)
+{
+    if (x_reset_source.x_reset_type == RESET_TYPE_UNKNOWN)
+    {
+        v_get_reset_source();
+    }
+
+    v_newline();
+    v_repeat_char('*', -64);
+    RPRINTF("Product             : " PRODUCT_NAME "\r\n"
+            "Product ID          : " PRODUCT_ID "\r\n"
+            "SKU                 : " PRODUCT_SKU "\r\n"
+            "Main PCB revision   : " MAIN_PCB_REVISION "\r\n"
+            "Firmware version    : " FIRMWARE_VERSION "\r\n"
+            "Release #           : " RELEASE_REVISION "\r\n"
+            "Build config        : " BUILD_CONFIG "\r\n"
+            "Build date          : " __DATE__ "\r\n"
+            "Build time          : " __TIME__ "\r\n"
+            "\r\n"
+            "Reset source        : [%02X] #%u-%s\r\n",
+            x_reset_source.u8_reset_flags,
+            x_reset_source.x_reset_type,
+            pc_reset_source_description(x_reset_source.x_reset_type)
+           );
+    v_repeat_char('*', -64);
+    v_newline();
+}
+
+/*============================================================================
+ * NVM PARAMETER POOL
+ *==========================================================================*/
+
+uint32_t u32_test_param_1;
+
+void v_param_init(void)
+{
+    x_nvm_pool_init(&g_x_nvm_param, NVM_DEVICE_MCUFLASH, NULL, 0, "PARAMS");
+
+    /* Example persistent parameter. Replace / extend for real use. */
+    u32_test_param_1 = 0xDEAD;
+    x_nvm_create(&g_x_nvm_param, NVM_PARAM_TEST_1,
+                 sizeof(u32_test_param_1),
+                 &u32_test_param_1);
+    x_nvm_get(&g_x_nvm_param, NVM_PARAM_TEST_1, &u32_test_param_1);
+
+    x_nvm_commit(&g_x_nvm_param);
+}
+
+/*============================================================================
+ * HARDWARE / SUBSYSTEM INIT
+ *==========================================================================*/
+
+void v_hardware_init(void)
+{
+    v_param_init();
+    HAL_TIM_Base_Start_IT(&PERIODIC_INT_TIMER_HANDLE);
+}
+
+/*============================================================================
+ * PERIODIC (10 ms) INTERRUPT SERVICE
+ *==========================================================================*/
+
+#define PERIODIC_TEST_INTERVAL_MS       1000
+
+static void v_periodic_int_test(void)
+{
+    static uint16_t u16_count;
+
+    u16_count += PERIODIC_TIMER_INTERVAL_MS;
+    if (u16_count >= PERIODIC_TEST_INTERVAL_MS)
+    {
+        u16_count -= PERIODIC_TEST_INTERVAL_MS;
+        v_job_add(NULL, JOB_PERIODIC);
+    }
+}
+
+static void v_timer_update(void)
+{
+    /* NVM auto-commit check */
+    if (g_x_nvm_param.u8_need_commit
+        && (g_x_nvm_param.u16_commit_timer < DEV_CONFIG_NVM_COMMIT_DELAY_MS))
+    {
+        g_x_nvm_param.u16_commit_timer += PERIODIC_TIMER_INTERVAL_MS;
+        if (g_x_nvm_param.u16_commit_timer >= DEV_CONFIG_NVM_COMMIT_DELAY_MS)
+        {
+            v_job_add(NULL, JOB_NVM_COMMIT);
+        }
+    }
+}
+
+/* Overrides the weak HAL stub; called on the periodic timer update event. */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim == &PERIODIC_INT_TIMER_HANDLE)
+    {
+        v_periodic_int_test();
+        v_timer_update();
+    }
+}
+
+/*============================================================================
+ * JOB DISPATCHER
+ *==========================================================================*/
+
+void v_process_next_job(void)
+{
+    uint8_t u8_job_available;
+    job_t x_job;
+
+    u8_job_available = u8_job_get(NULL, &x_job);
+    if (! u8_job_available)
+    {
+        return;
+    }
+
+    LOGCT(LOG_JOBS, "Next job: #%u", x_job.u8_id);
+
+    switch (x_job.u8_id)
+    {
+        case JOB_NONE:
+            break;
+
+        case JOB_NVM_COMMIT:
+            x_nvm_commit(&g_x_nvm_param);
+            break;
+
+        case JOB_PERIODIC:
+            break;
+
+        case JOB_QUEUE_OVERFLOW:
+            LOGC(LOG_SYSTEM, LOGC_WARNING,
+                 "Job queue overflow, %u job(s) lost", x_job.u8_param1);
+            break;
+
+        default:
+            break;
+    }
+}
+
+/*============================================================================
+ * MAIN POLLING TASK / ENTRY
+ *==========================================================================*/
+
+/*
+ * Everything that must be polled continuously runs here. app_main() calls it
+ * from a never-terminating loop; blocking operations may also call it to keep
+ * the system responsive while they wait (see i_getline() in utils.c).
+ */
+void app_polling_task(void)
+{
+    KICK_WATCHDOG();
+    v_debug_menu_service();
+    v_process_next_job();
+}
+
+NEVER_RETURNS void app_main(void)
+{
+    v_job_queue_init(NULL, NULL, 0);
+
+    v_print_startup_banner();
+    v_hardware_init();
+    v_debug_menu_init();
+
+    while (1)
+    {
+        app_polling_task();
+    }
+}

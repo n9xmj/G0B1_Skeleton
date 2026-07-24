@@ -1,0 +1,46 @@
+# ============================================================================
+#  G0B1_Skeleton — .gitignore  (STM32CubeIDE / CubeMX project)
+# ----------------------------------------------------------------------------
+#  Keep .cproject, .mxproject, .project and the .ioc tracked — they are needed
+#  to recreate the project in CubeIDE and regenerate code from CubeMX. Do NOT
+#  add them here.
+# ============================================================================
+
+# --- Per-user IDE workspace settings (not project settings) ---
+/.settings/
+*.metadata
+
+# --- Build output directories ---
+/Debug/
+/Release/
+
+# --- Compiled intermediates (not needed to reproduce a build) ---
+*.o
+*.d
+*.su
+*.cyclo
+*.list
+*.map
+*.mk
+makefile
+objects.list
+
+# --- CubeMX backups (common when regenerating) ---
+*.bak
+
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+*.tmp
+
+# --- Python caches (in case bench scripts get added later) ---
+__pycache__/
+*.py[cod]
+
+# --- Per-machine bench override (SN / COM / baud) ---
+# The committed scripts/bench.defaults.json holds this bench's values; other
+# machines drop a bench.defaults.local.json (keys win over the committed file).
+scripts/bench.defaults.local.json
