@@ -54,8 +54,9 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
-extern TIM_HandleTypeDef htim6;
-extern TIM_HandleTypeDef htim7;
+extern RTC_HandleTypeDef  hrtc;
+extern TIM_HandleTypeDef  htim7;
+extern TIM_HandleTypeDef  htim14;
 
 extern UART_HandleTypeDef huart2;
 
@@ -65,12 +66,6 @@ extern UART_HandleTypeDef huart2;
 #define NUCLEO_BUTTON_Pin GPIO_PIN_13
 #define NUCLEO_BUTTON_GPIO_Port GPIOC
 #define NUCLEO_BUTTON_EXTI_IRQn EXTI4_15_IRQn
-#define RTC_OSC32_IN_Pin GPIO_PIN_14
-#define RTC_OSC32_IN_GPIO_Port GPIOC
-#define RTC_OSC32_OUT_Pin GPIO_PIN_15
-#define RTC_OSC32_OUT_GPIO_Port GPIOC
-#define MCO_Pin GPIO_PIN_0
-#define MCO_GPIO_Port GPIOF
 #define DEBUG_TX_Pin GPIO_PIN_2
 #define DEBUG_TX_GPIO_Port GPIOA
 #define DEBUG_RX_Pin GPIO_PIN_3
