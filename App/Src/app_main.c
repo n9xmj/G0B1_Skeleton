@@ -22,6 +22,8 @@
 #include "jobs.h"
 #include "nvmparams.h"
 #include "debug_menu.h"
+#include "stdio_retarget.h"          /* v_stdio_retarget_attach_stream */
+#include "uart_stream.h"             /* x_uart_stream_init -- console bind */
 
 /*============================================================================
  * STARTUP BANNER
@@ -76,9 +78,67 @@ void v_param_init(void)
  * HARDWARE / SUBSYSTEM INIT
  *==========================================================================*/
 
+/*==========================================================================
+ * ADDING A UART TO THIS BUILD  (read before you add an x_uart_stream_init call)
+ *
+ *   1. Enable the UART in CubeMX (pins, baud, FIFO) and regenerate.
+ *   2. Add an x_uart_stream_init(&huartN, ...) call in v_uart_streams_init()
+ *      below, and route whatever consumes it.
+ *   3. *** FOOTGUN *** If this UART is the FIRST one on its NVIC vector, CubeMX
+ *      has just generated a virgin ISR in Core/Src/stm32g0xx_it.c. You MUST
+ *      paste the service hook into its USER CODE block, or HAL will service the
+ *      UART and kill RX on the first ORE. Exact 2-line snippet + the reason for
+ *      the trailing return: see uart_stream.h, "Integrating into a new target",
+ *      step 3. The USART2 vector is already hooked as the worked example.
+ *
+ *   G0B1 has THREE UART-serving vectors; hook whichever the new UART lands on:
+ *      USART1_IRQn                 -> USART1
+ *      USART2_LPUART2_IRQn         -> USART2, LPUART2
+ *      USART3_4_5_6_LPUART1_IRQn   -> USART3, USART4, USART5, USART6, LPUART1
+ *
+ *   The target table (uart_stream_target_g0b1.c) already lists all eight via
+ *   weak symbols, so it needs no edit -- an unprovisioned UART is simply NULL.
+ *   Wiring a new UART is therefore: CubeMX + an init call here + (only if it
+ *   opens a new vector) the it.c hook.
+ *==========================================================================*/
+
+/*
+ * Bind the console UART to uart_stream and move stdio onto its interrupt-driven
+ * rings. Until this runs, stdio uses a blocking HAL fallback, so the start-up
+ * banner (printed earlier) still reaches the terminal. After it, HAL is locked
+ * out of the console UART -- the handle is marked busy, and the vector in
+ * stm32g0xx_it.c routes to uart_stream.
+ *
+ * Ring buffers are allocated here (NULL storage pointers): a bind-time,
+ * application-lifetime allocation, not a repeated alloc/free that fragments.
+ *
+ * This is the single place UARTs get bound to uart_stream -- see the note above
+ * when adding another.
+ */
+static void v_uart_streams_init(void)
+{
+    uart_stream_h_t h_console;
+
+    h_console = x_uart_stream_init(&DEBUG_UART_HANDLE,
+                                   DEV_CONFIG_CONSOLE_RX_BUF_SIZE, NULL,
+                                   DEV_CONFIG_CONSOLE_TX_BUF_SIZE, NULL);
+
+    if (h_console == UART_STREAM_HANDLE_INVALID)
+    {
+        /* Stay on the HAL fallback; the console keeps working, just polled. */
+        printf("WARNING: console uart_stream bind failed - stdio stays on HAL\r\n");
+        return;
+    }
+
+    v_stdio_retarget_attach_stream(h_console);
+
+    /* Add further x_uart_stream_init() calls for additional UARTs here. */
+}
+
 void v_hardware_init(void)
 {
     v_param_init();
+    v_uart_streams_init();
     HAL_TIM_Base_Start_IT(&PERIODIC_INT_TIMER_HANDLE);
 }
 

@@ -29,6 +29,22 @@
 #endif
 
 //------------------------------------------------------------------------------
+// Console (uart_stream)
+//------------------------------------------------------------------------------
+//
+// Ring-buffer sizes for the console UART bound to uart_stream. The RX ring must
+// hold a whole command line: getchar() pulls one byte per main-loop pass and
+// cannot keep up with a sustained 921600-baud burst, so an incoming line has to
+// be able to sit in the ring while the console drains it. A ring SMALLER than
+// the longest legal line cannot receive that line at all.
+//
+// The queue leaves one slot empty, so usable capacity is one byte less than the
+// size given here.
+
+#define DEV_CONFIG_CONSOLE_TX_BUF_SIZE                                      1024
+#define DEV_CONFIG_CONSOLE_RX_BUF_SIZE                                      1024
+
+//------------------------------------------------------------------------------
 // Misc
 //------------------------------------------------------------------------------
 

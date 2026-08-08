@@ -105,6 +105,11 @@ static void v_debug_quick_test_2(void)
     printf("Quick test function 2 (stub)\r\n");
 }
 
+static void v_debug_at_main_menu(void)
+{
+    printf("(at main menu level)\r\n");
+}
+
 /*============================================================================
  * MENU DEFINITION
  *==========================================================================*/
@@ -144,6 +149,12 @@ static const menu_item_t x_debug_top_menu[] =
         .key = 'Q',
         .text = "Quick test function 2",
         .function = v_debug_quick_test_2
+    },
+    {
+        .item_type = MENU_ITEM_FUNCTION,
+        .key = '\x1B',
+        .text = NULL,
+        .function = v_debug_at_main_menu
     },
     {
         .item_type = MENU_ITEM_END_OF_LIST,
