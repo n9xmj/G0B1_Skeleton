@@ -75,6 +75,24 @@ do { \
 
 #define ELAPSED_TIME(ts)    (SYSTEM_TICK() - (ts))
 
+// Cooperative polling hook, pumped by blocking waits (i_getline, v_delay_pump,
+// the automation console's SCRIPT reader) so jobs and the watchdog keep running
+// while a wait spins. The application provides v_app_polling_task(); it is a
+// weak symbol so a portable module can call the macro whether or not any
+// application supplied the hook -- an unresolved weak symbol resolves to 0 and
+// the guard skips the call. Use the macro, never the bare symbol (an unguarded
+// call to an unresolved weak symbol is a branch to address 0).
+
+extern void v_app_polling_task(void) __attribute__((weak));
+
+#define PUMP_POLLING_TASK()                     \
+    do {                                        \
+        if (v_app_polling_task != 0)            \
+        {                                       \
+            v_app_polling_task();               \
+        }                                       \
+    } while (0)
+
 // Memory allocation sizes for NVM configuration and parameter storage
 #define NVM_PARAM_RAM_SIZE              512
 

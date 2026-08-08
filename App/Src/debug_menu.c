@@ -17,6 +17,7 @@
 #include "debug_menu.h"
 #include "utils.h"                   /* RTC wakeup + hour-time helpers under test */
 #include "rtc.h"                     /* hrtc, for post-STOP HAL_RTC_WaitForSynchro */
+#include "automation_console.h"      /* host/script command interface (optional) */
 
 /*============================================================================
  * PRIVATE PROTOTYPES
@@ -110,6 +111,19 @@ static void v_debug_at_main_menu(void)
     printf("(at main menu level)\r\n");
 }
 
+#if ACON_ENABLED
+/*
+ * Human-driven entry to the automation console. The machine (SCRIPT-mode) entry
+ * is the 0xDA sentinel intercepted in v_debug_menu_service() below.
+ */
+static void v_debug_automation_console(void)
+{
+    printf("Automation console - Ctrl-C or 'Q' to return, 'L' lists ops\r\n");
+    v_automation_console_run(ACON_MODE_HUMAN);
+    printf("\r\nReturned from automation console\r\n");
+}
+#endif
+
 /*============================================================================
  * MENU DEFINITION
  *==========================================================================*/
@@ -150,6 +164,14 @@ static const menu_item_t x_debug_top_menu[] =
         .text = "Quick test function 2",
         .function = v_debug_quick_test_2
     },
+#if ACON_ENABLED
+    {
+        .item_type = MENU_ITEM_FUNCTION,
+        .key = 'a',
+        .text = "Automation console (human-driven)",
+        .function = v_debug_automation_console
+    },
+#endif
     {
         .item_type = MENU_ITEM_FUNCTION,
         .key = '\x1B',
@@ -208,6 +230,19 @@ void v_debug_menu_service(void)
         {
             break;              /* no input pending */
         }
+
+#if ACON_ENABLED
+        /* Automation-console SCRIPT entry: a machine sends the non-typeable 0xDA
+         * sentinel. Intercepted before the echo so it never reaches the menu
+         * dispatcher. Runs with u8_reentry_lock held, which stops the nested
+         * v_debug_menu_service() (reached via v_app_polling_task) from stealing
+         * the console's input. */
+        if ((uint8_t) i_key == ACON_ENTER)
+        {
+            v_automation_console_run(ACON_MODE_SCRIPT);
+            continue;
+        }
+#endif
 
         p_c_char_to_str((char) i_key, str_key);
         printf("Cmd [%s]\r\n", str_key);
