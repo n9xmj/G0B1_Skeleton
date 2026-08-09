@@ -11,8 +11,9 @@ leaf), `App/Inc/logging_config.h` + `App/Src/logging_port.c` (app-owned seams). 
 **Parent docs:** [`portable-apis-strategy.md`](portable-apis-strategy.md) (conventions),
 [`improvements-backlog.md`](improvements-backlog.md) (items 1 and 2 are this work).
 
-**Status:** IMPLEMENTING — phases 1 and 2 complete and bench-verified; docs (T1-T3) and the
-I11 retrofit remain
+**Status:** DONE for logging — both phases built, bench-verified in Skeleton and
+SwitchTester, and the conventions written into the strategy doc. Open rows are follow-on
+work tracked here so they are not lost (I8, I11, S4, and the LED_Strip back-port).
 
 **Working mode:** decision-log model — one question at a time in chat, everything else
 parked on the board below. Agent never silently resolves a 🔴 or 🟡.
@@ -72,9 +73,9 @@ small unrelated defects parked here so they are not lost (I8, I12).
 | **I12** | 🟢 | `ANSI_FG_RGB` / `ANSI_BG_RGB` missing trailing `m` — fixed |
 | **I13** | 🟢 | `DPRINTF_TS` called a nonexistent function; never used, so never caught |
 | **I14** | 🟢 | `DPRINTF`/`DPRINTF_TS` always compile too, via `LOG_IN_DEBUG_BUILD` |
-| **T1** | 🟡 | Fold the tier model into `portable-apis-strategy.md` |
-| **T2** | 🟡 | Seam inventory table — which app file is which module's seam |
-| **T3** | 🟡 | Port `decision-log-model.md` into this repo's `Docs/planning/` |
+| **T1** | 🟢 | Tier model, dependency rule and naming folded into `portable-apis-strategy.md` |
+| **T2** | 🟢 | Seam inventory table added to `portable-apis-strategy.md` |
+| **T3** | 🟢 | `decision-log-model.md` ported into this repo |
 
 ## Wish list (v2+)
 
@@ -1124,7 +1125,7 @@ class set to `LOG_LEVEL_DISABLED`. Worth checking specifically that the **format
 literals** of eliminated calls leave `.rodata`, which is the part that most often survives
 dead-code elimination.
 
-**Plan status summary:** 🟡 4 · 🟢 20 · 🔵 4 — 28 rows.
+**Plan status summary:** 🟡 1 · 🟢 23 · 🔵 4 — 28 rows.
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.

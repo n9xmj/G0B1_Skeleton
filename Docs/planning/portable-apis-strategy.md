@@ -12,7 +12,83 @@ subdirectory, to be reused across STM32 projects:
 - **menusystem** — DONE. Lives portable in `LED_Strip_Controller_G474`.
 - **uart_stream** — DONE 2026-08-08. Migrated into `G0B1_Skeleton`, bench-verified.
 - **automation_console** — DONE 2026-08-08 (see below).
+- **logging** — DONE 2026-08-09. Vendored as `App/logging/` with compile-time verbosity
+  levels; bench-verified in Skeleton and SwitchTester. **It is the reference
+  implementation of the conventions below** — the first module built to the finished
+  seam model. Full decision log:
+  [`logging-api-plan.md`](logging-api-plan.md).
 - **nvmparams** — LATER; wants a partial refactor first (see the backlog doc).
+- **stdio retarget** — CANDIDATE, not yet a module. The three projects have diverged
+  (see S4 in the logging plan); most relevant is that `_read` returns `-1` on an empty
+  ring in Skeleton/SwitchTester but `0` bytes in LED_Strip, which code ported between
+  them would hit silently.
+
+## The three tiers
+
+Every file under `App/` answers one question — *"do I edit this when I clone Skeleton?"* —
+and the answer determines where it lives.
+
+| Tier | What it is | Where | Edit on clone? |
+|---|---|---|---|
+| **Vendored module** | portable API | `App/<module>/` | **never** — copy up/down wholesale |
+| **Vendored leaf** | shared dependency with no module of its own | `App/common/` | **never** |
+| **Seam** | the per-project half of a module's contract | `App/Inc/`, `App/Src/` | **always** |
+| **App** | the application itself | `App/Inc/`, `App/Src/` | it's yours |
+
+Seams deliberately sit *with* the application rather than in a directory of their own —
+the FreeRTOS `FreeRTOSConfig.h` / lwIP `lwipopts.h` / FatFs `ffconf.h` arrangement. The
+module ships a documented template; you copy it out and edit it in place. What a
+dedicated directory would have made obvious at a glance is carried instead by the seam
+inventory below and by an origin comment at the top of each copied template.
+
+## The dependency rule
+
+> A vendored module may `#include` the C library, other vendored modules, and its own
+> `<module>_config.h`. **Everything else it needs from the application it declares as an
+> `extern` prototype, and the application defines.**
+
+That is the FatFs `diskio.c` / lwIP `sys_arch.c` arrangement: the library publishes
+prototypes, the application supplies bodies — typically by copying the module's port
+template. A module never includes an app-authored header of macros, and avoids the HAL
+entirely where it can. Where a sensible default exists, give the declaration a **weak**
+definition in the module so a freshly-vendored copy links and runs before any port source
+has been written (`u32_log_timestamp_ms()` returns 0); where none does, use a weak
+declaration plus a null guard at the call site (`PUMP_POLLING_TASK()`).
+
+**Status:** `logging` satisfies this rule today. `uart_stream` and `automation_console`
+do **not** yet — `automation_console.{c,h}` include `device_config.h`, and
+`uart_stream.h` and `queue.c` include `main.h`. The retrofit is deferred until it blocks
+progress (I11 in the logging plan). Treat the rule as the **target** convention with
+logging as its reference implementation, not as something the whole tree already meets.
+
+## Directory naming
+
+A vendored module's directory is named for its **main source file, verbatim** —
+underscores included, no `-api` suffix:
+
+| Main source | Directory |
+|---|---|
+| `logging.c` | `App/logging/` |
+| `uart_stream.c` | `App/uart_stream/` |
+| `automation_console.c` | `App/automation_console/` |
+
+The same names are used in **all three projects**. Externally sourced libraries are the
+exception: `littlefs`, `tlsf`, `berry-lang` and the like keep their upstream identity,
+because that name *is* their identity.
+
+## Seam inventory
+
+What to edit after cloning Skeleton, and where each file came from:
+
+| Module | Config header (seam) | Port source (seam) | Templates in |
+|---|---|---|---|
+| `logging` | `App/Inc/logging_config.h` | `App/Src/logging_port.c` | `App/logging/*_template.*` |
+| `uart_stream` | *(none yet — uses `device_config.h`)* | `App/Src/uart_stream_target_g0b1.c` | — |
+| `automation_console` | *(none yet — uses `device_config.h`)* | `App/automation_console/automation_commands.c` | — |
+
+The "none yet" cells are exactly what I11 would fix: those two modules should gain
+`uart_stream_config.h` and `automation_console_config.h` rather than reaching into the
+application's aggregator.
 
 ## Sharing model (no git submodules)
 

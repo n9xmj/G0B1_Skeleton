@@ -1,14 +1,22 @@
 # Improvements backlog
 
 > Promoted from session notes on 2026-08-08. Captured-but-unbuilt ideas for the portable
-> APIs. None started yet. Companion: [`portable-apis-strategy.md`](portable-apis-strategy.md).
+> APIs. Items 1 and 2 are **done** (2026-08-09) — see
+> [`logging-api-plan.md`](logging-api-plan.md) for the decision log and verification.
+> Companion: [`portable-apis-strategy.md`](portable-apis-strategy.md).
 
-## 1. Logging API → own source subdir
+## 1. Logging API → own source subdir — ✅ DONE 2026-08-09
 
 Already API-ized; just relocate to `App/logging/` (or similar), like uart_stream /
 automation_console. Mechanical migration.
 
-## 2. Logging macros: binary switches → compile-time LOG LEVELS
+**As built:** it was not purely mechanical. The macro layer was extracted out of the
+app-owned config header into a vendored `log_helpers.h`, `ANSI.h` moved to `App/common/`,
+and the HAL dependency was replaced by an application-defined `u32_log_timestamp_ms()`.
+`debug_config.h` was renamed `logging_config.h` and its non-logging content moved to
+`device_config.h`.
+
+## 2. Logging macros: binary switches → compile-time LOG LEVELS — ✅ DONE 2026-08-09
 
 Today the message classes in `debug_config.h` are on/off booleans. Change to a level
 scheme: a global constant desired level — none (0), error, warning, info, debug (4) —
@@ -16,6 +24,30 @@ compared in the `LOGxx()` macros against each message's `LOG_xxxx` constant. Kee
 EVERYTHING `const`/`#define` so the `if()` in the macro folds at compile time and the
 guarded code is dead-code-eliminated when the test is false (holds at any `-O` above
 `-O0`).
+
+**As built — the ladder runs the other way.** The paragraph above describes an ascending
+*severity* scale, which was tried first and abandoned: with `>=` comparison, a global of
+`0` turned out to be the most permissive setting the scale could express, the exact
+opposite of what "none" promises. The constants are **verbosities**, so the shipped ladder
+ascends terse → chatty and the predicate is `<=`:
+
+```c
+#define LOG_LEVEL_QUIET     0   // never emitted — as a class value AND as the global
+#define LOG_LEVEL_ALWAYS    1
+#define LOG_LEVEL_ERROR     2
+#define LOG_LEVEL_WARNING   3
+#define LOG_LEVEL_INFO      4
+#define LOG_LEVEL_DEBUG     5
+
+#define LOG_EMIT(tag)   ( (tag) != LOG_LEVEL_QUIET && (tag) <= (LOG_LEVEL) )
+```
+
+That direction is what makes `0` mean quiet at *both* ends of the comparison, which in
+turn preserves the legacy 0/1 tags for free: a project that still writes
+`#define LOG_FOO 1` migrates by setting `LOG_LEVEL` to `LOG_LEVEL_DEBUG` and changing
+nothing else. The compile-time fold was measured, not assumed — a `QUIET` build drops the
+guarded code *and* its format-string literals from `.rodata`. See D1/S3 in
+[`logging-api-plan.md`](logging-api-plan.md).
 
 ## 3. nvmparams → own subdir AND fully HW-independent
 
