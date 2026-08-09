@@ -11,10 +11,31 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "debug_config.h"
+#include "logging_config.h"
 #include "main.h"
 #include "platform.h"
 #include "globals.h"
+
+//------------------------------------------------------------------------------
+// Build options
+//------------------------------------------------------------------------------
+//
+// Turn off build-time options if DEBUG is not defined (via the -DDEBUG
+// compiler command line option). Logging answers DEBUG for itself, in
+// logging_config.h.
+
+#ifndef DEBUG
+#undef DEBUG_MENU
+#define DEBUG_MENU                      0
+#endif
+
+// Debug menu system enable.
+// Set this to allow the debug menu system to be included. Independent of the
+// logging configuration in logging_config.h.
+
+#ifndef DEBUG_MENU
+#define DEBUG_MENU                      1
+#endif
 
 //------------------------------------------------------------------------------
 
@@ -45,14 +66,14 @@
 #define DEV_CONFIG_CONSOLE_RX_BUF_SIZE                                      1024
 
 //------------------------------------------------------------------------------
-// Automation console (App/automation-console)
+// Automation console (App/automation_console)
 //------------------------------------------------------------------------------
 //
 // Build switch for the machine-facing command console. 1 compiles it in: the
 // debug-menu 'a' entry, the 0xDA SCRIPT-mode sentinel, and the @/$ example
 // commands. 0 compiles it out entirely -- the module bodies drop to nothing and
 // the entry points become inert inline stubs, so no call site needs an #ifdef.
-// See App/automation-console/automation_console.h.
+// See App/automation_console/automation_console.h.
 
 #define DEV_CONFIG_ENABLE_AUTOMATION_CONSOLE                                   1
 
