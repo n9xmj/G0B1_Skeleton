@@ -9,7 +9,11 @@
 These subsystems are being (re)designed as **portable, drop-in APIs**, each in its own
 subdirectory, to be reused across STM32 projects:
 
-- **menusystem** — DONE. Lives portable in `LED_Strip_Controller_G474`.
+- **menusystem** — **NOT vendored yet; packaging only.** Earlier versions of this doc said
+  "DONE, lives portable in LED_Strip" — that was wrong and is corrected here. The *code* is
+  effectively portable already (zero application dependencies), but it is not a module in
+  any project: `App/Src/menusystem.c` in Skeleton and SwitchTester, `App/menu-api/menu-api.c`
+  in LED_Strip. See backlog item 5 for the packaging plan.
 - **uart_stream** — DONE 2026-08-08. Migrated into `G0B1_Skeleton`, bench-verified.
 - **automation_console** — DONE 2026-08-08 (see below).
 - **logging** — DONE 2026-08-09. Vendored as `App/logging/` with compile-time verbosity

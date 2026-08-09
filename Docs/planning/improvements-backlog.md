@@ -51,6 +51,16 @@ guarded code *and* its format-string literals from `.rodata`. See D1/S3 in
 
 ## 3. nvmparams → own subdir AND fully HW-independent
 
+**Sequenced LAST, deliberately** (user, 2026-08-09): it needs the most planning
+investment, and the design is still evolving. Do the low-hanging packaging jobs
+(item 5) first.
+
+**This one gets the full decision-log board** (`Docs/planning/nvmparams-plan.md`), and
+the user expects to **interrupt frequently to revise and extend the wish list**. That is
+the intended working mode here, not a sign of churn: park every open point as a row,
+keep the board current as they revise, and do not try to close design questions on their
+behalf. Contrast item 5, which is mechanical and wants no board at all.
+
 Migrate to `App/nvmparams/`, then add a **pluggable storage-driver** layer so the pool has
 no dependency on the NVM hardware. The caller attaches read/write "drivers" at pool init
 via a standardized prototype, for any backend: STM internal flash, SPI/I2C flash,
@@ -99,3 +109,47 @@ keystrokes visible. **The single-char menu idle loop must stay UNMUTED** (logs v
 while waiting for a key) — only multi-char line entry mutes. Today the ONLY caller of
 `v_stdout_mute()` is the automation-console SCRIPT session; `i_getline` just moved its
 echo to stderr and asserts nothing yet.
+
+## 5. menusystem → vendored module (packaging)
+
+**Phase 1 — packaging only, no behaviour change.** The code is already portable: zero
+application dependencies in either copy (C library plus its own header; Skeleton's also
+pulls `ANSI.h`). What is missing is packaging, following the logging model.
+
+**Baseline: LED_Strip's `App/menu-api/menu-api.{c,h}`** (user decision 2026-08-09). It is
+the more evolved copy, not merely the one without the `ANSI.h` dependency:
+
+| | LED_Strip (baseline) | Skeleton / SwitchTester |
+|---|---|---|
+| Include guard | `#pragma once` | **`#ifndef DEBUG_H`** — wrong name, latent collision |
+| Prompt macro | `MENU_API_PROMPT`, `#ifndef`-guarded | `MENUSYSTEM_PROMPT`, unguarded |
+| Field naming | `x_type`, `c_key`, `p_c_text`, `pfn_function` | `item_type`, `key`, `text`, `function` |
+| `const` correctness | `const char *p_c_text` | `char *text` |
+| The spare byte | **`b_no_newline`**, a real flag | `_reserved` padding |
+
+Skeleton and SwitchTester are **byte-identical to each other**, so this is a two-way
+reconciliation. The 192 differing lines between the `.c` files are almost entirely the
+naming convention, not logic.
+
+**Name it `menusystem`,** so the directory is `App/menusystem/` and the file
+`menusystem.c`. Not `console_menusystem` — length without disambiguation, and
+`automation_console` already owns "console" here. Note the content comes from LED_Strip
+while the *filename* does not: this is also what retires the `menu-api` naming question.
+
+**Measured cost** — all mechanical, and every miss is a hard compile error because these
+are designated initialisers:
+
+| Project | Touch points | Where |
+|---|---|---|
+| Skeleton | **69** | `debug_menu.c` 35, `menusystem.c` 26, header 8 |
+| SwitchTester | **154** | `debug_menu.c` **120**, `menusystem.c` 26, header 8 |
+
+Also needed: a `menusystem_config.h` for the prompt macro, and the three `.cproject` files.
+
+**Accepted trade:** both copies have the key-conflict check, but Skeleton's colours the
+warning via `ANSI_FG_YELLOW` and LED_Strip's does not. The warning goes monochrome — which
+is exactly what drops the `ANSI.h` dependency, so take it rather than reintroducing ANSI.
+
+**Phase 2 — wish list, not scoped.** Collapse the per-line option flags
+(`b_not_implemented`, `b_no_newline` — currently a whole `uint8_t` each) into a single
+bitfielded struct/union byte, for size, ease of use and semantic consistency.
