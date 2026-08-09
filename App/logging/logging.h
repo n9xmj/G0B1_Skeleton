@@ -1,16 +1,45 @@
 /******************************************************************************
  * logging.h
+ *
+ * VENDORED MODULE -- App/logging/ (the engine layer)
+ *
+ * Declares the log_color_t attribute set and the v_log*() output functions.
+ * This header and logging.c depend on nothing but the C library and the
+ * vendored ANSI.h; there is no HAL, no platform.h and no application header
+ * in the dependency graph.
+ *
+ * The two things this module needs FROM the application it declares here and
+ * the application defines:
+ *
+ *   1. uint32_t u32_log_timestamp_ms(void)  -- see the prototype below.
+ *      A weak default returning 0 lives in logging.c, so a project links and
+ *      runs before it has written a port source (timestamps read 0.000).
+ *      Copy logging_port_template.c to your App/Src/ to override it.
+ *
+ *   2. logging_config.h -- the per-project config header naming the message
+ *      classes. Copy logging_config_template.h to your App/Inc/ and edit.
+ *
+ * It is suggested that the macros in log_helpers.h be used to generate log
+ * messages rather than calling these functions directly. The functions apply
+ * no compile-time filtering, so direct calls are always emitted even in a
+ * build intended to produce no debug output.
  ******************************************************************************/
 
 #ifndef LOGGING_H
 #define LOGGING_H
 
+#include <stdint.h>
+
 #include "ANSI.h"
 
 // Set LOG_WITH_TIMESTAMP to a nonzero value to enable log outputs generated
 // using v_log_* functions that include '_time' in the name (such as
-// v_log_printf_time()) to prefix message outputs with a timestamp derived
-// from the system RTC (HAL_GetTick() for STM32)
+// v_log_printf_time()) to prefix message outputs with a timestamp obtained
+// from u32_log_timestamp_ms().
+//
+// This is the fallback default. To change it, define LOG_WITH_TIMESTAMP in
+// logging_config.h BEFORE that file includes this one -- the #ifndef below
+// then leaves the project's choice alone.
 
 #ifndef LOG_WITH_TIMESTAMP
 #define LOG_WITH_TIMESTAMP              1
@@ -87,6 +116,8 @@ log_color_t;
 // provided when a printf-workalike function is tagged with
 // _attribute__((format (printf, x, y)))
 // The Keil (MDK-ARM) toolchain supports this too, using the same syntax
+//
+// Defined here only; log_helpers.h picks it up by including this header.
 
 #if defined(__GNUC__) || defined(__CC_ARM)
 #define PRINTF_ATTR(fmtpos,va_argpos)   __attribute__((format (printf, fmtpos, va_argpos)))
@@ -94,11 +125,22 @@ log_color_t;
 #define PRINTF_ATTR(fmtpos,va_argpos)
 #endif
 
-// It is suggested that the logging macros defined in debug_config.h used to
-// generate log messages rather than using these functions directly.
-// These functions do not provide any sort of compile-time inclusion filtering,
-// so direct calls to these will always be included in the application code,
-// even if a release version intended to have no debug outputs is built.
+//------------------------------------------------------------------------------
+// Application-supplied bridge function (see the file header)
+//------------------------------------------------------------------------------
+
+// Return a free-running millisecond counter, used to prefix timestamped log
+// messages. On STM32 the application normally returns HAL_GetTick().
+//
+// logging.c provides a weak definition returning 0, so this need not be
+// supplied for the module to link. Define it in your own source file (see
+// logging_port_template.c) to override that default.
+
+extern uint32_t u32_log_timestamp_ms(void);
+
+//------------------------------------------------------------------------------
+// Output functions
+//------------------------------------------------------------------------------
 
 extern void v_log_printf(char *p_c_format, ...) PRINTF_ATTR(1, 2);
 extern void v_logc_printf(log_color_t x_color, char *p_c_format, ...) PRINTF_ATTR(2, 3);
