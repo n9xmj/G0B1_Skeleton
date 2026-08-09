@@ -10,8 +10,8 @@ These subsystems are being (re)designed as **portable, drop-in APIs**, each in i
 subdirectory, to be reused across STM32 projects:
 
 - **menusystem** — DONE. Lives portable in `LED_Strip_Controller_G474`.
-- **uart-stream** — DONE 2026-08-08. Migrated into `G0B1_Skeleton`, bench-verified.
-- **automation-console** — DONE 2026-08-08 (see below).
+- **uart_stream** — DONE 2026-08-08. Migrated into `G0B1_Skeleton`, bench-verified.
+- **automation_console** — DONE 2026-08-08 (see below).
 - **nvmparams** — LATER; wants a partial refactor first (see the backlog doc).
 
 ## Sharing model (no git submodules)
@@ -24,11 +24,11 @@ Defer any sync tooling until a 2nd live sibling exists. (SwitchTester was cloned
 Skeleton and is where uart-stream + the automation console were developed, so it became
 their happenstance landing site; Skeleton is the intended home.)
 
-## uart-stream conventions
+## uart_stream conventions
 
 Established during the 2026-08-08 migration.
 
-- **Module bundle:** `App/uart-stream/{uart_stream.c,uart_stream.h,queue.c,queue.h}` —
+- **Module bundle:** `App/uart_stream/{uart_stream.c,uart_stream.h,queue.c,queue.h}` —
   family-neutral **except** the register-surface seam in `v_uart_stream_service`, which
   assumes the FIFO-capable USART IP (ISR/TDR/RDR/ICR + `_RXFNE`/`_TXFNF` bit names).
   G0/C0/G4/L4/L5/U5/H5/H7/WB/WL share it (STM32H723 is a near-drop-in); legacy USARTv1
@@ -55,9 +55,9 @@ Established during the 2026-08-08 migration.
 - **Performance note:** USART4/5/6 lack a FIFO and cap at 230400 baud; everything else
   reaches 921600.
 
-## automation-console
+## automation_console
 
-Vendored 2026-08-08. `App/automation-console/`, split into:
+Vendored 2026-08-08. `App/automation_console/`, split into:
 
 - `automation_console.c` — **portable core**: executive, framing, dispatch, and the
   builtins (quit / list / version / no-op).

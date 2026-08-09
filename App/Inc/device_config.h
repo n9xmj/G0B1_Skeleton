@@ -66,14 +66,14 @@
 #define DEV_CONFIG_CONSOLE_RX_BUF_SIZE                                      1024
 
 //------------------------------------------------------------------------------
-// Automation console (App/automation-console)
+// Automation console (App/automation_console)
 //------------------------------------------------------------------------------
 //
 // Build switch for the machine-facing command console. 1 compiles it in: the
 // debug-menu 'a' entry, the 0xDA SCRIPT-mode sentinel, and the @/$ example
 // commands. 0 compiles it out entirely -- the module bodies drop to nothing and
 // the entry points become inert inline stubs, so no call site needs an #ifdef.
-// See App/automation-console/automation_console.h.
+// See App/automation_console/automation_console.h.
 
 #define DEV_CONFIG_ENABLE_AUTOMATION_CONSOLE                                   1
 

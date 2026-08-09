@@ -22,7 +22,7 @@ parked on the board below. Agent never silently resolves a 🔴 or 🟡.
 ## Brief
 
 The logging API already exists and works, but it is not portable in the way the other
-vendored modules (`uart-stream`, `automation-console`) now are: the macro layer lives
+vendored modules (`uart_stream`, `automation_console`) now are: the macro layer lives
 inside the app-owned `debug_config.h`, so every project re-copies and independently
 drifts the macro definitions; `logging.c` hard-includes the family HAL header purely for
 `HAL_GetTick()`; and its `ANSI.h` dependency lives outside the module directory
@@ -48,7 +48,7 @@ small unrelated defects parked here so they are not lost (I8, I12).
 | ID | Status | Subject (one line) |
 |----|--------|--------------------|
 | **D1** | 🟢 | Level axis — class carries a **verbosity** tier; one global `LOG_LEVEL` ceiling |
-| **D2** | 🟢 | Module directory is named for its core source file — `App/logging/` |
+| **D2** | 🟢 | Module directory is named for its core source file, verbatim — `App/logging/` |
 | **D3** | 🟢 | `ANSI.h` moves to `App/common/`, chartered as vendored leaves only |
 | **D4** | 🔵 | Runtime-settable log level (menu / acon command) |
 | **D5** | 🟢 | Seam shape — module declares extern prototypes, app defines them in a port source |
@@ -57,6 +57,7 @@ small unrelated defects parked here so they are not lost (I8, I12).
 | **S1** | 🟢 | "Logging off" is `LOG_LEVEL_QUIET`; the empty-macro block is deleted |
 | **S2** | 🔵 | Severity ↔ colour interaction — does severity override the class colour? |
 | **S3** | 🟢 | Dissolved by D1's reversal — one guard, `0` means quiet on both sides |
+| **S4** | 🔵 | stdio-retarget contract differs across the three projects (`_read` especially) |
 | **I1** | 🟢 | Three-layer split adopted: engine / sugar / template |
 | **I2** | 🟢 | Seam files live in `App/Inc` + `App/Src`, edited in place |
 | **I3** | 🟢 | Timestamp reaches the module via an app-defined extern (superseded by D5) |
@@ -112,9 +113,11 @@ Established; do not re-litigate unless explicitly reopened.
   therefore `tag <= LOG_LEVEL`. A tag's number is "the verbosity tier at which this class
   becomes visible"; `LOG_LEVEL` is "how verbose I am willing to be". **`0` means quiet on
   both sides** — that is the design constraint everything else serves.
-- **A vendored module's directory is named for its core source file** (D2) — `logging.c` →
-  `App/logging/`, `menusystem.c` → `App/menusystem/`. Applies to every vendored library
-  created from here on, not just this one. No `-api` suffix.
+- **A vendored module's directory is named for its core source file, verbatim** (D2) —
+  `logging.c` → `App/logging/`, `uart_stream.c` → `App/uart_stream/`,
+  `automation_console.c` → `App/automation_console/`. Underscores, not hyphens; no `-api`
+  suffix. **The same names are used in all three projects.** Applies to every vendored
+  library created from here on. Third-party libraries keep their upstream names.
 - **`App/common/` holds vendored leaves only** (D3) — files copied unchanged between
   projects. Seams never go there; they live in `App/Inc` / `App/Src` per I2.
 - **Test / HIL code inclusion belongs behind a compiler command-line define**, in the style
@@ -291,13 +294,20 @@ attached: **a vendored module's directory is named for its core source file** �
 → `App/logging/`, `menusystem.c` → `App/menusystem/`, and likewise for every vendored
 library created from here on. The `-api` suffix is dropped.
 
-**Rider, not blocking.** The rule is unambiguous for single-word modules but the two
-existing multi-word directories separate differently from their files: `App/uart-stream/`
-holds `uart_stream.c`, and `App/automation-console/` holds `automation_console.c` — hyphen
-in the directory, underscore in the file. Strict application of the rule would make those
-`App/uart_stream/` and `App/automation_console/`. Nothing in phase 1 touches either, so the
-call can wait and ride along with the I11 retrofit; flagged here so it is a decision rather
-than an accident.
+**Rider — resolved 2026-08-09.** The rule is unambiguous for single-word modules, but the
+two multi-word directories used to separate differently from their files: `App/uart-stream`
+held `uart_stream.c`, and `App/automation-console` held `automation_console.c` — hyphen in
+the directory, underscore in the file.
+
+**User decision: the directory name matches the main source file name verbatim, underscores
+included, and the same names are used across all three projects.** Renamed in Skeleton to
+`App/uart_stream/` and `App/automation_console/`; SwitchTester and LED_Strip take the same
+names as they are migrated (LED_Strip's `logging-api/` → `logging/`). Verified as a pure
+rename: clean build, `text` unchanged at 32920.
+
+Scope boundary worth respecting: the rule governs **our** vendored APIs. Third-party
+libraries carried in LED_Strip (`littlefs`, `tlsf`, `berry-lang`) keep their upstream
+identity — renaming those would fight the projects they come from and buys nothing.
 
 ---
 
@@ -637,6 +647,48 @@ in the template so nobody reads "ALWAYS" as outranking the master switch.
 Note the immediate migration does not exercise the quiet case: Skeleton and SwitchTester
 run `LOG_LEVEL = LOG_LEVEL_DEBUG`, so a global of `QUIET` appears only in a logging-off
 build.
+
+---
+
+### S4 — stdio-retarget contract differs across the three projects
+
+**Status:** 🔵 deferred · **Needs user:** not yet
+
+**Question:** raised by the user 2026-08-09. Skeleton and SwitchTester retarget stdio via
+`stdio_retarget.c`; LED_Strip uses `__io_putchar()` / `__io_getchar()`. Should LED_Strip be
+refactored to match?
+
+**What the code actually shows.** The gap is much smaller than the framing suggests.
+LED_Strip does **not** rely on Core's `_write` — `App/Src/syscalls_vfs.c` provides strong
+`_write`/`_read` with fd routing, and stdout and stderr are already separate seams
+(`__io_putchar` vs `__io_putchar_stderr`, the latter deliberately distinct "so it can be
+re-pointed independently of stdout"). That is the same architecture as `stdio_retarget.c`,
+plus a byte-level indirection and VFS routing for fd >= 3.
+
+| Capability | Skeleton | LED_Strip |
+|---|---|---|
+| fd-routed `_write`, stderr separated | yes | yes |
+| VFS fds >= 3 | no | yes |
+| stdout mute + cursor-column tracker | yes | no |
+| non-blocking `_read` | yes, returns `-1` when empty | no, `__io_getchar()` returns `0` |
+| block writes | yes, buffer handed to uart_stream | byte-at-a-time loop |
+
+**Trap to record before any code moves between these trees:** the `_read` semantics differ.
+Skeleton returns `-1` on an empty ring; LED_Strip returns `0` bytes, and `fs_shell_hrn.c`
+depends on that ("returns 0 when the RX ring is empty — same as a 0x00 data byte"). Code
+that reads stdin will misbehave silently if ported without adjustment.
+
+**Leaning / recommendation:** **defer — but not on difficulty.** Adding the mute to
+LED_Strip's existing fd-1 branch is ~20-30 lines and needs no architectural change. The
+reason to wait is that nothing in LED_Strip *consumes* it: the mute exists to protect a
+SCRIPT frame stream, and LED_Strip has no automation console. Building it now is
+speculative.
+
+Better framing than "port `stdio_retarget.c` into LED_Strip": converge the **contract** —
+fd routing, stderr always-through, mute semantics, `_read` return convention — and let each
+project keep its back-end, since one has a filesystem and the others do not. That likely
+makes stdio-retarget a fifth vendored API, but a thin one. Belongs in
+`portable-apis-strategy.md` when T1 is written.
 
 ---
 
@@ -1072,7 +1124,7 @@ class set to `LOG_LEVEL_DISABLED`. Worth checking specifically that the **format
 literals** of eliminated calls leave `.rodata`, which is the part that most often survives
 dead-code elimination.
 
-**Plan status summary:** 🟡 4 · 🟢 20 · 🔵 3 — 27 rows.
+**Plan status summary:** 🟡 4 · 🟢 20 · 🔵 4 — 28 rows.
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.

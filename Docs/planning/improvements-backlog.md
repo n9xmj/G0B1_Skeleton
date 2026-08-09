@@ -5,8 +5,8 @@
 
 ## 1. Logging API → own source subdir
 
-Already API-ized; just relocate to `App/logging/` (or similar), like uart-stream /
-automation-console. Mechanical migration.
+Already API-ized; just relocate to `App/logging/` (or similar), like uart_stream /
+automation_console. Mechanical migration.
 
 ## 2. Logging macros: binary switches → compile-time LOG LEVELS
 
