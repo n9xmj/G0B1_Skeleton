@@ -29,12 +29,17 @@ drifts the macro definitions; `logging.c` hard-includes the family HAL header pu
 altogether. A third project, `LED_Strip_Controller_G474`, has already solved most of the
 organisational half — this plan adopts that structure and finishes the job.
 
-The functional half is the level scheme. Today each message class (`LOG_SYSTEM`,
-`LOG_JOBS`, `LOG_EXTI`) is a 1/0 boolean tested by an `if()` inside the macro. The goal is
-a severity ladder — none / error / warning / info / debug — compared against a threshold,
-with everything `const`/`#define` so the comparison folds at compile time and the guarded
-call is dead-code-eliminated at any `-O` above `-O0`. The open question is which *axis*
-the levels run on; that is D1 and it blocks all implementation.
+The functional half is the level scheme. Each message class (`LOG_SYSTEM`, `LOG_JOBS`,
+`LOG_EXTI`) was a 1/0 boolean tested by an `if()` inside the macro; it now carries a
+**verbosity tier** compared against one global `LOG_LEVEL` ceiling, with everything
+`const`/`#define` so the comparison folds at compile time and the guarded call is
+dead-code-eliminated at any `-O` above `-O0` — measured, and the format-string literals go
+with it. The axis question was D1; it resolved to the class carrying the tier, which left
+every existing call site unchanged.
+
+**Both phases are built and bench-verified.** What remains is documentation (T1–T3),
+retrofitting the two older vendored modules to the finished convention (I11), and two
+small unrelated defects parked here so they are not lost (I8, I12).
 
 ---
 
