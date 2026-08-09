@@ -31,6 +31,33 @@ metadata.
 Known gotcha to keep in mind: a NOLOAD NVM sector survives a reflash, so a foreign
 project's pool can shadow your IDs (this is not an nvmparams bug).
 
+### Test hardware and where the SPI flash driver lands
+
+**A W25Q128 is now physically attached to the G0B1 bench platform** (user, 2026-08-09).
+It is not needed for any application function — it is there specifically so the pluggable
+storage-driver layer can be exercised against a *real* second backend rather than only
+against internal flash. That matters: a driver interface validated against one backend
+tends to encode that backend's assumptions.
+
+Driving it needs the **core SPI flash driver** from `LED_Strip_Controller_G474`
+(`App/spiflash/`) — the raw chip driver only, **not** the partition table or the VFS/
+littlefs layers stacked on top of it there.
+
+**Landing site: SwitchTester, not Skeleton** (user preference — keep the SPI flash API out
+of the Skeleton baseline). That preference and the architecture agree, which is worth
+stating explicitly because it is the first real test of the design:
+
+- The **nvmparams core** is by definition hardware-independent, so it is portable and
+  belongs in Skeleton as a vendored module (`App/nvmparams/`).
+- A **storage driver** is the per-project seam — the D5 pattern, where the module declares
+  the interface and the application supplies an implementation. The W25Q128 driver and the
+  nvmparams storage driver that wraps it are seam code.
+
+So SwitchTester carries `App/spiflash/` plus its storage-driver glue, Skeleton carries the
+core and stays clean, and neither needs the other. If that split turns out to be awkward
+in practice, the awkwardness is telling us something about the driver interface, which is
+exactly what the bench part is for.
+
 ## 4. Wire i_getline to self-mute stdout
 
 Mechanism exists (see the stdout-mute section of the strategy doc), not wired. Have

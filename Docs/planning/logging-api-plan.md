@@ -82,7 +82,7 @@ small unrelated defects parked here so they are not lost (I8, I12).
 |----|---------|
 | **W1** | Runtime log-level control from the debug menu / automation console |
 | **W2** | Split the toolchain sugar out of `platform.h` into `App/common/compiler.h` |
-| **W3** | Back-port the finished module to `SwitchTester` and `LED_Strip_Controller_G474` |
+| **W3** | Back-port the finished module — SwitchTester DONE 2026-08-09; LED_Strip pending |
 
 ---
 
@@ -1128,6 +1128,6 @@ dead-code elimination.
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.
-**Next action:** W3 phased migration — SwitchTester first, then LED_Strip. T1-T3 docs follow.
+**Next action:** LED_Strip migration (build-verified only — no G474 target on the bench), then T1-T3 docs.
 
 **End of logging-api-plan.md**
