@@ -33,24 +33,24 @@
 #include "logging.h"   // for log_color_t etc. (needed for the _COLOR values below)
 
 //------------------------------------------------------------------------------
-// Build configuration guards
+// Global verbosity ceiling
 //------------------------------------------------------------------------------
-// Turn off logging if DEBUG is not defined (via the -DDEBUG compiler command
-// line option).
+// How verbose this build is willing to be. A message class is emitted when its
+// tier is at or below this. The ladder (LOG_LEVEL_QUIET .. LOG_LEVEL_DEBUG) and
+// what the tiers mean are documented in logging.h.
+//
+//   LOG_LEVEL_QUIET    nothing at all, including LOG_LEVEL_ALWAYS classes
+//   LOG_LEVEL_ERROR    only ALWAYS + ERROR classes
+//   LOG_LEVEL_DEBUG    everything
+//
+// Turn logging off entirely if DEBUG is not defined (via the -DDEBUG compiler
+// command line option); otherwise use the project setting below.
 
 #ifndef DEBUG
-#undef DEBUG_LOGGING
-#define DEBUG_LOGGING                   0
-#endif
-
-// Global debug logging enable
-// Setting this to 0 disables most application-generated outputs.
-// Debug menu inclusion is independent of this setting -- see DEBUG_MENU in
-// device_config.h.
-
-#if !defined(DEBUG_LOGGING)
-// Change this to enable or disable all debug logging output
-#define DEBUG_LOGGING                   1
+#define LOG_LEVEL                       LOG_LEVEL_QUIET
+#else
+// Change this to raise or lower debug logging output for the whole build.
+#define LOG_LEVEL                       LOG_LEVEL_DEBUG
 #endif
 
 //------------------------------------------------------------------------------
@@ -61,25 +61,28 @@
 // token-pasting operator:
 //
 //   LOGCT(LOG_SYSTEM, "value = %d", n);   ->  uses LOG_SYSTEM_TAG / _COLOR
-
-#if DEBUG_LOGGING
+//
+// The class value is the verbosity tier at which that class becomes visible.
+// LOG_LEVEL_QUIET switches a class off outright, whatever LOG_LEVEL is.
+//
+// These are deliberately NOT wrapped in a conditional: the macros always
+// compile, so the tag symbols must always exist. A logging-off build is
+// expressed by LOG_LEVEL above, not by making these disappear.
 
 // Misc/system
-#define LOG_SYSTEM                      1
+#define LOG_SYSTEM                      LOG_LEVEL_DEBUG
 #define LOG_SYSTEM_TAG                  "SYSTEM"
 #define LOG_SYSTEM_COLOR                LOGC_BRIGHT_MAGENTA
 
 // Job queue activty
-#define LOG_JOBS                        0
+#define LOG_JOBS                        LOG_LEVEL_QUIET
 #define LOG_JOBS_TAG                    "JOB"
 #define LOG_JOBS_COLOR                  LOGC_WHITE
 
 // EXTI interrupt reporting
-#define LOG_EXTI                        0
+#define LOG_EXTI                        LOG_LEVEL_QUIET
 #define LOG_EXTI_TAG                    "EXTI"
 #define LOG_EXTI_COLOR                  LOGC_WHITE
-
-#endif  // DEBUG_LOGGING
 
 //------------------------------------------------------------------------------
 // Pull in the macro sugar (LOGCT, LOG, LOGC, RPRINTF, DPRINTF, ...).

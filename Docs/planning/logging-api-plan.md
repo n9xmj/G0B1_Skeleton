@@ -11,7 +11,8 @@ leaf), `App/Inc/logging_config.h` + `App/Src/logging_port.c` (app-owned seams). 
 **Parent docs:** [`portable-apis-strategy.md`](portable-apis-strategy.md) (conventions),
 [`improvements-backlog.md`](improvements-backlog.md) (items 1 and 2 are this work).
 
-**Status:** IMPLEMENTING — phase 1 complete and bench-verified; phase 2 (the ladder) next
+**Status:** IMPLEMENTING — phases 1 and 2 complete and bench-verified; docs (T1-T3) and the
+I11 retrofit remain
 
 **Working mode:** decision-log model — one question at a time in chat, everything else
 parked on the board below. Agent never silently resolves a 🔴 or 🟡.
@@ -48,13 +49,13 @@ the levels run on; that is D1 and it blocks all implementation.
 | **D5** | 🟢 | Seam shape — module declares extern prototypes, app defines them in a port source |
 | **D6** | 🟢 | Rename/split `debug_config.h` → `logging_config.h`; delete `DEBUG_LOGGING` + `INCLUDE_TESTS` |
 | **D7** | 🟢 | `debug_config.h` is deleted; `DEBUG_MENU` folds into `device_config.h` |
-| **S1** | 🟡 | What "logging off" means — level NONE, not empty macros |
+| **S1** | 🟢 | "Logging off" is `LOG_LEVEL_QUIET`; the empty-macro block is deleted |
 | **S2** | 🔵 | Severity ↔ colour interaction — does severity override the class colour? |
 | **S3** | 🟢 | Dissolved by D1's reversal — one guard, `0` means quiet on both sides |
 | **I1** | 🟢 | Three-layer split adopted: engine / sugar / template |
 | **I2** | 🟢 | Seam files live in `App/Inc` + `App/Src`, edited in place |
 | **I3** | 🟢 | Timestamp reaches the module via an app-defined extern (superseded by D5) |
-| **I4** | 🟡 | Wrap all macros in `do { } while (0)` |
+| **I4** | 🟢 | All macros wrapped in `do { } while (0)` |
 | **I5** | 🟢 | `ANSI.h` include CASE normalised — not a missing include, as first recorded |
 | **I6** | 🟢 | `ANSI.h` copies reconciled; Skeleton canonical, include guard added |
 | **I7** | 🟢 | `platform.h` guard renamed to `PLATFORM_H`; LL includes retained |
@@ -64,6 +65,7 @@ the levels run on; that is D1 and it blocks all implementation.
 | **I11** | 🟡 | Existing vendored modules already violate the dependency rule |
 | **I12** | 🟡 | `ANSI_FG_RGB` / `ANSI_BG_RGB` are missing the trailing `m` and cannot render |
 | **I13** | 🟢 | `DPRINTF_TS` called a nonexistent function; never used, so never caught |
+| **I14** | 🟢 | `DPRINTF`/`DPRINTF_TS` always compile too, via `LOG_IN_DEBUG_BUILD` |
 | **T1** | 🟡 | Fold the tier model into `portable-apis-strategy.md` |
 | **T2** | 🟡 | Seam inventory table — which app file is which module's seam |
 | **T3** | 🟡 | Port `decision-log-model.md` into this repo's `Docs/planning/` |
@@ -1020,8 +1022,32 @@ Skeleton is the starter project, so the model should ship with it.
    `LOG_JOBS` at `0` emitted **nothing**, confirming the compile-time fold; and timestamps
    advance truthfully — `(11.314)` → `(11.564)` across a `v_delay_ms(250)`, proving the
    application bridge is live rather than the weak default's `0.000`.
-2. **Levels** — the D1 verbosity ladder, S3's `LOG_EMIT()` predicate, S1's removal of the
-   empty-macro block
+2. **Levels — ✅ DONE 2026-08-09.** The D1 verbosity ladder (constants in `logging.h`),
+   S3's `LOG_EMIT()` predicate, S1's removal of the empty-macro block, I4's `do{}while(0)`
+   wrapper, I14's always-compiled `DPRINTF`. `DEBUG_LOGGING` deleted; the tag triplets are
+   no longer wrapped in a conditional. Application source untouched apart from the test
+   hook.
+
+   **Verification — the fold is real.** Built twice, identically except for `LOG_LEVEL`:
+
+   | `LOG_LEVEL` | text | log format strings present in the `.bin`? |
+   |---|---|---|
+   | `LOG_LEVEL_DEBUG` | 32920 | yes |
+   | `LOG_LEVEL_QUIET` | 32044 | **no** — every one gone |
+
+   876 bytes recovered, and grepping the image for `"LOGCT: tag color"`, `"LOG: no color"`
+   and `"timestamp check"` returns **zero** matches in the QUIET build while control
+   strings from plain `printf()` still appear twice. So the elimination removes the
+   `.rodata` literals as well as the code — the specific thing flagged earlier as worth
+   measuring rather than assuming. (`"SYSTEM"` survives once because `LOG_SYSTEM_TAG` is
+   also consumed by the plain-`printf` ladder table in the test hook.)
+
+   **Bench-verified** on key `q`: all macro forms behave as in phase 1 (no regression);
+   the ladder table reports `LOG_LEVEL = 5`, `SYSTEM tier 5 emit=1`, `JOB tier 0 emit=0`,
+   `EXTI tier 0 emit=0`; and all four ordering edge cases return what the design requires —
+   QUIET class under a DEBUG ceiling `0`, ALWAYS class under a QUIET ceiling `0`, ERROR
+   under WARNING `1`, DEBUG under WARNING `0`. The dangling-else case compiles and takes
+   the `else`, confirming I4. Timestamps still advance truthfully (`15.467` → `15.718`).
    (and the matching move of the tag triplets out of `#if DEBUG_LOGGING`), I4's `do/while`
    wrapper. Application source is untouched; the edits land in `log_helpers.h` and
    `debug_config.h` only.
@@ -1035,10 +1061,10 @@ class set to `LOG_LEVEL_DISABLED`. Worth checking specifically that the **format
 literals** of eliminated calls leave `.rodata`, which is the part that most often survives
 dead-code elimination.
 
-**Plan status summary:** 🟡 8 · 🟢 16 · 🔵 2 — 26 rows.
+**Plan status summary:** 🟡 6 · 🟢 19 · 🔵 2 — 27 rows.
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.
-**Next action:** phase 2 — the verbosity ladder (D1), the LOG_EMIT predicate (S3), the empty-macro removal (S1) and the do/while wrapper (I4).
+**Next action:** T1-T3 (docs) and the I11 retrofit of uart-stream / automation-console to the finished convention. Code work on logging itself is complete.
 
 **End of logging-api-plan.md**

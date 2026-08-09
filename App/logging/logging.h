@@ -46,6 +46,48 @@
 #endif
 
 //------------------------------------------------------------------------------
+// Verbosity levels
+//------------------------------------------------------------------------------
+//
+// These measure VERBOSITY, not severity, and they ascend from terse to chatty.
+// Read a value as "the verbosity tier at which this message class becomes
+// visible" -- equivalently, how much noise you must be willing to accept in
+// order to see it. An error is cheap to show; debug chatter is expensive.
+//
+// Two things are expressed on this one scale:
+//
+//   - Each message class in logging_config.h is assigned a tier:
+//         #define LOG_SYSTEM      LOG_LEVEL_ERROR
+//   - LOG_LEVEL, also in logging_config.h, is the global ceiling -- how
+//         verbose this build is willing to be.
+//
+// A class is emitted when its tier is within the ceiling (tag <= LOG_LEVEL),
+// so LOG_LEVEL_WARNING passes ALWAYS/ERROR/WARNING and drops INFO/DEBUG. See
+// LOG_EMIT() in log_helpers.h for the exact predicate.
+//
+// LOG_LEVEL_QUIET is 0 at BOTH ends of that comparison: a class set to QUIET
+// never emits, and a global set to QUIET emits nothing at all -- including
+// LOG_LEVEL_ALWAYS, which means "never filtered out by verbosity tuning", not
+// "outranks the master switch". Use RPRINTF() for output that must survive
+// any configuration.
+//
+// Keeping 0 == quiet is also what preserves the legacy 0/1 enable scheme: a
+// project that still writes `#define LOG_FOO 1` need only set
+// LOG_LEVEL to LOG_LEVEL_DEBUG and everything behaves as it did before.
+//
+// All of these are compile-time constants so the test in each LOGxx() macro
+// folds and the guarded call is eliminated at any -O above -O0. Do not make
+// LOG_LEVEL a runtime variable: an application may carry hundreds of LOGxx()
+// invocations and the elimination is the whole point on a small part.
+
+#define LOG_LEVEL_QUIET                 0   // never emitted (class or global)
+#define LOG_LEVEL_ALWAYS                1   // shown whenever logging is on at all
+#define LOG_LEVEL_ERROR                 2
+#define LOG_LEVEL_WARNING               3
+#define LOG_LEVEL_INFO                  4
+#define LOG_LEVEL_DEBUG                 5   // chattiest
+
+//------------------------------------------------------------------------------
 
 // Color values used with color logging functions
 // v_logc_xxx(), LOGC(), LOGC_PLAIN()

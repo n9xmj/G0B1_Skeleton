@@ -47,21 +47,30 @@
 #include "logging.h"   // brings in log_color_t and the LOGC_* constants used below
 
 //------------------------------------------------------------------------------
-// Build configuration guards
+// Global verbosity ceiling (EDIT THIS)
 //------------------------------------------------------------------------------
+// How verbose this build is willing to be. A message class is emitted when its
+// tier is at or below this value. The ladder and what the tiers mean are
+// documented in logging.h:
+//
+//   LOG_LEVEL_QUIET    0   nothing at all, including LOG_LEVEL_ALWAYS classes
+//   LOG_LEVEL_ALWAYS   1   only classes marked ALWAYS
+//   LOG_LEVEL_ERROR    2
+//   LOG_LEVEL_WARNING  3
+//   LOG_LEVEL_INFO     4
+//   LOG_LEVEL_DEBUG    5   everything
+//
+// MIGRATING AN OLDER PROJECT that still writes `#define LOG_FOO 1` / `0`?
+// Set LOG_LEVEL to LOG_LEVEL_DEBUG and leave the tags alone -- a tag of 0 stays
+// quiet and a tag of 1 stays on, exactly as before. One line, no refactor.
+//
 // Turn logging off entirely if DEBUG is not defined (via -DDEBUG on the
 // compiler command line, typically set in Debug build configurations).
 
 #ifndef DEBUG
-#undef DEBUG_LOGGING
-#define DEBUG_LOGGING                   0
-#endif
-
-// Global debug logging enable.
-// Set to 0 to disable most application-generated debug output at compile time.
-
-#if !defined(DEBUG_LOGGING)
-#define DEBUG_LOGGING                   1
+#define LOG_LEVEL                       LOG_LEVEL_QUIET
+#else
+#define LOG_LEVEL                       LOG_LEVEL_DEBUG
 #endif
 
 //------------------------------------------------------------------------------
@@ -69,33 +78,36 @@
 //------------------------------------------------------------------------------
 // Each message class you want to use requires three coordinated defines:
 //
-//   #define LOG_FOO           1          // 0 = completely compiled out
-//   #define LOG_FOO_TAG       "FOO"      // string used in the [TAG] prefix
-//   #define LOG_FOO_COLOR     LOGC_xxx   // one of the LOGC_* values in logging.h
+//   #define LOG_FOO           LOG_LEVEL_INFO   // QUIET = compiled out entirely
+//   #define LOG_FOO_TAG       "FOO"            // string used in the [TAG] prefix
+//   #define LOG_FOO_COLOR     LOGC_xxx         // an LOGC_* value from logging.h
 //
-// The LOGCT(LOG_FOO, "fmt", args...) family only emits code when LOG_FOO is
-// nonzero, giving cheap compile-time filtering per subsystem. You only pass the
-// un-suffixed name to the macro -- it reaches _TAG and _COLOR itself using the
-// ## token-pasting operator.
+// The class value is the verbosity tier at which that class becomes visible --
+// how chatty it is. Give terse, important classes a low tier (ERROR) and noisy
+// ones a high tier (DEBUG), then tune LOG_LEVEL above to taste. The
+// LOGCT(LOG_FOO, "fmt", args...) family folds the comparison at compile time,
+// giving free per-subsystem filtering. You only pass the un-suffixed name to
+// the macro -- it reaches _TAG and _COLOR itself using the ## token-pasting
+// operator.
 //
 // Keep the names reasonably short. Colors are defined in logging.h (LOGC_RED,
 // LOGC_WHITE, LOGC_YELLOW, LOGC_BRIGHT_* etc. plus the attribute bits).
 //
+// Do NOT wrap these in a conditional. The macros always compile, so the tag
+// symbols must always exist; a logging-off build is expressed by LOG_LEVEL
+// above, not by making the tags disappear.
+//
 // The example tags below are for illustration only.
 
-#if DEBUG_LOGGING
-
 // Generic / catch-all messages that don't fit another category.
-#define LOG_SYSTEM                      1
+#define LOG_SYSTEM                      LOG_LEVEL_INFO
 #define LOG_SYSTEM_TAG                  "SYSTEM"
 #define LOG_SYSTEM_COLOR                LOGC_BRIGHT_MAGENTA
 
 // Example subsystem tag (replace or delete as needed).
-#define LOG_EXAMPLE                     1
+#define LOG_EXAMPLE                     LOG_LEVEL_DEBUG
 #define LOG_EXAMPLE_TAG                 "EX"
 #define LOG_EXAMPLE_COLOR               LOGC_WHITE
-
-#endif  // DEBUG_LOGGING
 
 //------------------------------------------------------------------------------
 // Pull in the macro sugar (LOGCT, LOG, RPRINTF, DPRINTF, etc.)
