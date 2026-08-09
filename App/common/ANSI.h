@@ -153,12 +153,8 @@
 
 #define ANSI_FG_FMT                 CSI_S "38;5;%um"
 
-// NOTE: the RGB forms below are missing the trailing "m" that terminates an
-// SGR sequence, so they do not currently render. Pre-existing in both project
-// copies and unused; left as-is here rather than silently changed. See the
-// logging-api plan (I12).
-#define ANSI_FG_RGB(r,g,b)          CSI_S "38;2;" #r ";" #g ";" #b
-#define ANSI_FG_RGB_FMT             CSI_S "38;2;%u;%u;%u"
+#define ANSI_FG_RGB(r,g,b)          CSI_S "38;2;" #r ";" #g ";" #b "m"
+#define ANSI_FG_RGB_FMT             CSI_S "38;2;%u;%u;%um"
 
 #define ANSI_BG_BLACK               CSI_S "48;5;0m"
 #define ANSI_BG_RED                 CSI_S "48;5;1m"
@@ -178,8 +174,8 @@
 #define ANSI_BG_BRIGHT_CYAN         CSI_S "48;5;14m"
 #define ANSI_BG_BRIGHT_WHITE        CSI_S "48;5;15m"
 
-#define ANSI_BG_RGB(r,g,b)          CSI_S "48;2;" #r ";" #g ";" #b
-#define ANSI_BG_RGB_FMT             CSI_S "48;2;%u;%u;%u"
+#define ANSI_BG_RGB(r,g,b)          CSI_S "48;2;" #r ";" #g ";" #b "m"
+#define ANSI_BG_RGB_FMT             CSI_S "48;2;%u;%u;%um"
 
 #define ANSI_DEFAULT_COLOR          ANSI_ATTR_OFF
 

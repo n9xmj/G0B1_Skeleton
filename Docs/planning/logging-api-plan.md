@@ -64,11 +64,11 @@ small unrelated defects parked here so they are not lost (I8, I12).
 | **I5** | 🟢 | `ANSI.h` include CASE normalised — not a missing include, as first recorded |
 | **I6** | 🟢 | `ANSI.h` copies reconciled; Skeleton canonical, include guard added |
 | **I7** | 🟢 | `platform.h` guard renamed to `PLATFORM_H`; LL includes retained |
-| **I8** | 🟡 | NVM auto-commit delay defined twice, in two units, in two files |
+| **I8** | 🟡 | NVM auto-commit delay defined twice — keep `device_config.h`'s, drop `platform.h`'s |
 | **I9** | 🟢 | `PRINTF_ATTR` now defined once, in `logging.h` |
 | **I10** | 🟢 | Call-site sweep — none needed; D1 leaves every existing call site unchanged |
-| **I11** | 🟡 | Existing vendored modules already violate the dependency rule |
-| **I12** | 🟡 | `ANSI_FG_RGB` / `ANSI_BG_RGB` are missing the trailing `m` and cannot render |
+| **I11** | 🔵 | Existing vendored modules violate the dependency rule — deferred until it blocks |
+| **I12** | 🟢 | `ANSI_FG_RGB` / `ANSI_BG_RGB` missing trailing `m` — fixed |
 | **I13** | 🟢 | `DPRINTF_TS` called a nonexistent function; never used, so never caught |
 | **I14** | 🟢 | `DPRINTF`/`DPRINTF_TS` always compile too, via `LOG_IN_DEBUG_BUILD` |
 | **T1** | 🟡 | Fold the tier model into `portable-apis-strategy.md` |
@@ -830,7 +830,12 @@ as canonical, note the ordering choice.
 mismatch makes the drift silent. Strictly out of scope for logging — captured here so it
 is not lost; may belong on the nvmparams plan instead.
 
-**Resolution:** _(pending)_
+**Resolution (decided, not yet applied):** **keep `DEV_CONFIG_NVM_COMMIT_DELAY_MS` in
+`device_config.h` and delete `NVM_AUTO_COMMIT_DELAY` from `platform.h`.** User decision,
+this session. The surviving one is in milliseconds rather than 10 ms units and sits with
+the other product options, so it reads correctly at the point of use. Whoever applies it
+must check `v_nvm_commit_check()` in `app_main.c`, which consumes the 10 ms-unit form and
+will need its arithmetic adjusted. Deferred to the nvmparams work.
 
 ---
 
@@ -903,12 +908,13 @@ finished convention rather than a special case.
 
 **Leaning / recommendation:** fix logging to the convention now, since it is being
 rewritten anyway. Retrofitting `uart-stream` and `automation-console` is mechanical but
-touches two working, bench-verified modules and would want a reflash to confirm — so it is
-a separate piece of work, and a scope call rather than something to fold in silently.
-Recommend: do logging now, retrofit the other two as a follow-on before the convention is
-written into the strategy doc (T1), so the doc describes something true.
+touches two working, bench-verified modules and would want a reflash to confirm.
 
-**Resolution:** _(pending)_
+**Resolution:** 🔵 **deferred** — user decision, this session: revisit when it actually
+blocks progress. Consequence to respect: **T1 must not claim the convention is universal**
+while two vendored modules still reach into `device_config.h` and `main.h`. Describe it as
+the target convention, with logging as the reference implementation and the other two
+noted as not yet conforming.
 
 ---
 
@@ -1066,10 +1072,10 @@ class set to `LOG_LEVEL_DISABLED`. Worth checking specifically that the **format
 literals** of eliminated calls leave `.rodata`, which is the part that most often survives
 dead-code elimination.
 
-**Plan status summary:** 🟡 6 · 🟢 19 · 🔵 2 — 27 rows.
+**Plan status summary:** 🟡 4 · 🟢 20 · 🔵 3 — 27 rows.
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.
-**Next action:** T1-T3 (docs) and the I11 retrofit of uart-stream / automation-console to the finished convention. Code work on logging itself is complete.
+**Next action:** W3 phased migration — SwitchTester first, then LED_Strip. T1-T3 docs follow.
 
 **End of logging-api-plan.md**
