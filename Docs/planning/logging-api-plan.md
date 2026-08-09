@@ -5,15 +5,16 @@ module, and replace its per-class on/off booleans with a compile-time **log leve
 scheme that folds away when a message is below threshold.
 
 **Code home:** `App/logging/` (engine + sugar + templates), `App/common/ANSI.h` (vendored
-leaf), `App/Inc/logging_config.h` + `App/Src/logging_port.c` (app-owned seams). Was
+leaf), `App/Inc/logging_config.h` + `App/Src/logging_port.c` (app-owned port files). Was
 `App/Inc/logging.h`, `App/Src/logging.c`, `App/Inc/debug_config.h`, `App/Inc/ANSI.h`.
 
 **Parent docs:** [`portable-apis-strategy.md`](portable-apis-strategy.md) (conventions),
 [`improvements-backlog.md`](improvements-backlog.md) (items 1 and 2 are this work).
 
-**Status:** DONE for logging — both phases built, bench-verified in Skeleton and
-SwitchTester, and the conventions written into the strategy doc. Open rows are follow-on
-work tracked here so they are not lost (I8, I11, S4, and the LED_Strip back-port).
+**Status:** **DONE.** Both phases built, bench-verified, and migrated to all three
+projects. The conventions are written into `portable-apis-strategy.md`. Remaining rows are
+follow-on work parked here so they are not lost (I8, I11, S4) — none of them belong to
+logging itself.
 
 **Working mode:** decision-log model — one question at a time in chat, everything else
 parked on the board below. Agent never silently resolves a 🔴 or 🟡.
@@ -38,9 +39,15 @@ dead-code-eliminated at any `-O` above `-O0` — measured, and the format-string
 with it. The axis question was D1; it resolved to the class carrying the tier, which left
 every existing call site unchanged.
 
-**Both phases are built and bench-verified.** What remains is documentation (T1–T3),
-retrofitting the two older vendored modules to the finished convention (I11), and two
-small unrelated defects parked here so they are not lost (I8, I12).
+**This work is complete.** Both phases are built and bench-verified, the conventions are
+written into [`portable-apis-strategy.md`](portable-apis-strategy.md), and the module has
+been migrated to all three projects — where the six vendored files are now byte-identical,
+which is the property the exercise existed to produce.
+
+What is left on the board belongs to *other* work and is parked here only so it is not
+lost: retrofitting the two older vendored modules to the finished convention (I11), the
+stdio-retarget divergence (S4), a duplicated NVM constant that belongs to the nvmparams
+refactor (I8), and a deferred runtime-level idea (D4/W1).
 
 ---
 
@@ -52,7 +59,7 @@ small unrelated defects parked here so they are not lost (I8, I12).
 | **D2** | 🟢 | Module directory is named for its core source file, verbatim — `App/logging/` |
 | **D3** | 🟢 | `ANSI.h` moves to `App/common/`, chartered as vendored leaves only |
 | **D4** | 🔵 | Runtime-settable log level (menu / acon command) |
-| **D5** | 🟢 | Seam shape — module declares extern prototypes, app defines them in a port source |
+| **D5** | 🟢 | Port shape — module declares extern prototypes, app defines them in a port source |
 | **D6** | 🟢 | Rename/split `debug_config.h` → `logging_config.h`; delete `DEBUG_LOGGING` + `INCLUDE_TESTS` |
 | **D7** | 🟢 | `debug_config.h` is deleted; `DEBUG_MENU` folds into `device_config.h` |
 | **S1** | 🟢 | "Logging off" is `LOG_LEVEL_QUIET`; the empty-macro block is deleted |
@@ -60,7 +67,7 @@ small unrelated defects parked here so they are not lost (I8, I12).
 | **S3** | 🟢 | Dissolved by D1's reversal — one guard, `0` means quiet on both sides |
 | **S4** | 🔵 | stdio-retarget contract differs across the three projects (`_read` especially) |
 | **I1** | 🟢 | Three-layer split adopted: engine / sugar / template |
-| **I2** | 🟢 | Seam files live in `App/Inc` + `App/Src`, edited in place |
+| **I2** | 🟢 | Port files live in `App/Inc` + `App/Src`, edited in place |
 | **I3** | 🟢 | Timestamp reaches the module via an app-defined extern (superseded by D5) |
 | **I4** | 🟢 | All macros wrapped in `do { } while (0)` |
 | **I5** | 🟢 | `ANSI.h` include CASE normalised — not a missing include, as first recorded |
@@ -74,7 +81,7 @@ small unrelated defects parked here so they are not lost (I8, I12).
 | **I13** | 🟢 | `DPRINTF_TS` called a nonexistent function; never used, so never caught |
 | **I14** | 🟢 | `DPRINTF`/`DPRINTF_TS` always compile too, via `LOG_IN_DEBUG_BUILD` |
 | **T1** | 🟢 | Tier model, dependency rule and naming folded into `portable-apis-strategy.md` |
-| **T2** | 🟢 | Seam inventory table added to `portable-apis-strategy.md` |
+| **T2** | 🟢 | Port inventory table added to `portable-apis-strategy.md` |
 | **T3** | 🟢 | `decision-log-model.md` ported into this repo |
 
 ## Wish list (v2+)
@@ -83,7 +90,7 @@ small unrelated defects parked here so they are not lost (I8, I12).
 |----|---------|
 | **W1** | Runtime log-level control from the debug menu / automation console |
 | **W2** | Split the toolchain sugar out of `platform.h` into `App/common/compiler.h` |
-| **W3** | Back-port the finished module — SwitchTester DONE 2026-08-09; LED_Strip pending |
+| **W3** | ~~Back-port the finished module~~ — **DONE 2026-08-09**, all three projects |
 
 ---
 
@@ -94,7 +101,7 @@ Established; do not re-litigate unless explicitly reopened.
 - **`G0B1_Skeleton` is the canonical base.** No git submodules — cloning Skeleton *is*
   the delivery mechanism for a new project. Back-porting a leaf improvement means copying
   the vendored directory *up* into Skeleton.
-- **Seams are edited in place in the app's own directories** (I2, user, this session) —
+- **Port files are edited in place in the app's own directories** (I2, user, this session) —
   the FreeRTOS `FreeRTOSConfig.h` / lwIP `lwipopts.h` pattern. There is no separate
   "port" directory.
 - **Vendored modules must not depend on app-specific code.** Final formulation (D5): a
@@ -120,12 +127,12 @@ Established; do not re-litigate unless explicitly reopened.
   suffix. **The same names are used in all three projects.** Applies to every vendored
   library created from here on. Third-party libraries keep their upstream names.
 - **`App/common/` holds vendored leaves only** (D3) — files copied unchanged between
-  projects. Seams never go there; they live in `App/Inc` / `App/Src` per I2.
+  projects. Port files never go there; they live in `App/Inc` / `App/Src` per I2.
 - **Test / HIL code inclusion belongs behind a compiler command-line define**, in the style
   of `DEBUG` — i.e. its own build configuration — **not** an in-tree config symbol. User
   convention, this session, carried from a commercial project. This is why `INCLUDE_TESTS`
   was deleted rather than repaired (D6): the mechanism was wrong, not just unused.
-- **Because Skeleton is the starter project, its own `App/Inc` seam files ARE the
+- **Because Skeleton is the starter project, its own `App/Inc` port files ARE the
   templates.** A `*_template.h` shipped inside a module directory serves *foreign*
   adopters (e.g. back-porting into LED_Strip), not Skeleton clones.
 
@@ -334,15 +341,15 @@ does it live?
 **Leaning / recommendation:** **`App/common/`**, with the charter written into the
 strategy doc. The user's original instinct was right; it only felt unresolvable because
 the candidate contents mixed two opposite kinds of file — portable leaves (`ANSI.h`,
-`utils.c`) that are copied unchanged, and *seams* (`debug_config.h`,
+`utils.c`) that are copied unchanged, and *port files* (`debug_config.h`,
 `uart_stream_target_g0b1.c`, `device_config.h`) that are meant to be rewritten in every
-project. I2 removes the seams from the picture, and `common/` becomes coherent: it holds
+project. I2 removes the port files from the picture, and `common/` becomes coherent: it holds
 only files where the answer to "do I edit this on clone?" is always *no*.
 
 **Resolution:** **`App/common/`.** User decision, this session — `ANSI.h` is the odd one
 out, depended on by both the app and by vendored libraries, and `common/` is the best
 available home. Charter: **vendored leaves only** — files where the answer to "do I edit
-this on clone?" is always *no*. Seams never go here (I2).
+this on clone?" is always *no*. Port files never go here (I2).
 
 Open sub-question for when the directory grows: does `utils.c`/`utils.h` qualify, or does
 it have app dependencies that disqualify it? Needs an audit, not an assumption — and it is
@@ -369,7 +376,7 @@ locked and built.
 
 ---
 
-### D5 — Seam shape: how a vendored module reaches the application *(resolved)*
+### D5 — Port shape: how a vendored module reaches the application *(resolved)*
 
 **Status:** 🟢 · **Needs user:** no
 
@@ -402,7 +409,7 @@ them in `diskio.c` from a template; lwIP declares `sys_now()` and the port imple
 `sys_arch.c`; FreeRTOS declares its `vApplicationXxxHook()` prototypes and the app supplies
 bodies; littlefs takes read/prog/erase/sync as function pointers in `lfs_config`.
 
-**The seam therefore has two halves**, both app-owned, both copied from templates
+**The port therefore has two halves**, both app-owned, both copied from templates
 (consistent with I2):
 
 | Half | What it is | Precedent | Here |
@@ -449,7 +456,7 @@ a better-named header?
 
 **Leaning / recommendation:** **split.** Two independent arguments:
 
-1. **The name is wrong for what it does.** Its content is the logging seam.
+1. **The name is wrong for what it does.** Its content is the logging port configuration.
 2. **The convention we just settled requires it.** D5/I11 name every module's config header
    `<module>_config.h` — `uart_stream_config.h`, `automation_console_config.h`. Under that
    rule `debug_config.h` is the only odd one out, and `logging_config.h` is not merely a
@@ -661,7 +668,7 @@ refactored to match?
 
 **What the code actually shows.** The gap is much smaller than the framing suggests.
 LED_Strip does **not** rely on Core's `_write` — `App/Src/syscalls_vfs.c` provides strong
-`_write`/`_read` with fd routing, and stdout and stderr are already separate seams
+`_write`/`_read` with fd routing, and stdout and stderr are already separate port points
 (`__io_putchar` vs `__io_putchar_stderr`, the latter deliberately distinct "so it can be
 re-pointed independently of stdout"). That is the same architecture as `stdio_retarget.c`,
 plus a byte-level indirection and VFS routing for fd >= 3.
@@ -710,7 +717,7 @@ makes stdio-retarget a fifth vendored API, but a thin one. Belongs in
 **Leaning / recommendation:** adopt as-is. The key move is extracting the macros out of the
 app-owned `debug_config.h` into the vendored `log_helpers.h`, so the macro definitions stop
 being re-copied and drifting per project. `debug_config.h` shrinks to build guards + the
-tag table + a trailing `#include "log_helpers.h"`. This is the same core/seam shape already
+tag table + a trailing `#include "log_helpers.h"`. This is the same core/port shape already
 used by `automation_console.c` vs `automation_commands.c` and `uart_stream.c` vs
 `uart_stream_target_g0b1.c`.
 
@@ -723,11 +730,11 @@ header.
 
 ---
 
-### I2 — Seam files live in the app's own directories *(resolved)*
+### I2 — Port files live in the app's own directories *(resolved)*
 
 **Status:** 🟢 · **Needs user:** no
 
-**Question:** do the per-project seam files get their own directory, or go in `App/Inc` and
+**Question:** do the per-project port files get their own directory, or go in `App/Inc` and
 `App/Src` alongside app code?
 
 **Options considered:** a dedicated `App/port/` directory makes "must I edit this?"
@@ -740,8 +747,8 @@ TinyUSB `tusb_config.h`, mbedTLS `mbedtls_config.h`. The module ships a document
 template; the app copies it out of the module directory into its own include directory and
 edits it there. No separate port directory.
 
-Consequence to cover elsewhere: the "which files are seams?" visibility that a dedicated
-directory would have given is instead carried by T2's seam inventory plus a header comment
+Consequence to cover elsewhere: the "which files are port files?" visibility that a dedicated
+directory would have given is instead carried by T2's port inventory plus a header comment
 in each copied template naming its origin — a convention LED_Strip's `debug_config.h`
 already follows.
 
@@ -942,7 +949,7 @@ and runs — but "copy this directory into a new project" currently does not wor
 also having a `device_config.h` shaped like this project's.
 
 **Options considered:** per D5, the modules need two different things from the app and they
-come from the two halves of the seam:
+come from the two halves of the port:
 
 - **Bridge functions** — the polling pump; a timestamp for logging. The module declares
   `extern` prototypes in its own header; the app defines them in a port source copied from
@@ -1020,7 +1027,7 @@ test hook and confirmed working on the bench (`(11.312) DPRINTF_TS: ...`).
 
 **Status:** 🟡 · **Needs user:** no
 
-**Question:** the vendored / seam / app tier model and the refined dependency rule are
+**Question:** the vendored / port / app tier model and the refined dependency rule are
 cross-cutting — they govern `nvmparams` and every future module, not just logging.
 
 **Leaning / recommendation:** write a short section into
@@ -1032,15 +1039,15 @@ strategy doc is the contract.
 
 ---
 
-### T2 — Seam inventory
+### T2 — Port inventory
 
 **Status:** 🟡 · **Needs user:** no
 
-**Question:** with seams living in `App/Inc`/`App/Src` (I2), nothing at a glance
-distinguishes "seam you must edit on clone" from "app code you rewrite anyway".
+**Question:** with port files living in `App/Inc`/`App/Src` (I2), nothing at a glance
+distinguishes "port file you must edit on clone" from "app code you rewrite anyway".
 
 **Leaning / recommendation:** a small table — in `README.md` or the strategy doc — mapping
-each vendored module to its seam file and the template it came from. That is the checklist
+each vendored module to its port file and the template it came from. That is the checklist
 a new project actually wants, and the clone-based workflow currently has no equivalent.
 Pair it with the origin comment each copied template already carries.
 
@@ -1115,7 +1122,28 @@ Skeleton is the starter project, so the model should ship with it.
    (and the matching move of the tag triplets out of `#if DEBUG_LOGGING`), I4's `do/while`
    wrapper. Application source is untouched; the edits land in `log_helpers.h` and
    `debug_config.h` only.
-3. **Docs** — T1, T2, T3.
+3. **Docs** — T1, T2, T3. ✅ DONE.
+
+4. **Migration (W3) — ✅ DONE 2026-08-09.** SwitchTester (commit `d6ef483`, HIL suite
+   47/47) and LED_Strip_Controller_G474 (commit `3f36684`, build-verified only — no G474
+   target on the bench).
+
+   **The result worth recording: all six vendored files —
+   `logging.{c,h}`, `log_helpers.h`, both templates and `common/ANSI.h` — are
+   BYTE-IDENTICAL across all three projects.** That is the property the whole exercise was
+   for, and it is now mechanically checkable with `diff` rather than asserted.
+
+   LED_Strip is the strongest evidence: its `logging.c` used to differ from Skeleton's by
+   exactly one line (`stm32g4xx_hal.h` vs `stm32g0xx_hal.h`). Routing the tick through the
+   application-defined `u32_log_timestamp_ms()` removed that last family dependency, and
+   the size delta was **+8 bytes on both G0 and G4** — the same 8-byte port function in
+   each, with the map confirming the weak default discarded in both.
+
+   LED_Strip also turned out to need *less* than expected: it already had the three-layer
+   split, and all three of its build flags (`DEBUG_LOGGING`, `DEBUG_MENU`,
+   `INCLUDE_TESTS`) were dead, so `debug_config.h` left nothing behind. Its
+   `App/uart-stream/` was renamed to `App/uart_stream/` in the same pass (commit
+   `4e7591e`).
 
 Keeping these as two commits gives a clean bisect point and keeps the level diff readable.
 

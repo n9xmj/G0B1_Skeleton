@@ -15,13 +15,35 @@ subdirectory, to be reused across STM32 projects:
 - **logging** — DONE 2026-08-09. Vendored as `App/logging/` with compile-time verbosity
   levels; bench-verified in Skeleton and SwitchTester. **It is the reference
   implementation of the conventions below** — the first module built to the finished
-  seam model. Full decision log:
+  port model. Full decision log:
   [`logging-api-plan.md`](logging-api-plan.md).
 - **nvmparams** — LATER; wants a partial refactor first (see the backlog doc).
 - **stdio retarget** — CANDIDATE, not yet a module. The three projects have diverged
   (see S4 in the logging plan); most relevant is that `_read` returns `-1` on an empty
   ring in Skeleton/SwitchTester but `0` bytes in LED_Strip, which code ported between
   them would hit silently.
+
+## Vocabulary
+
+**The per-project half of a module's contract is a PORT, not a "seam".** Use *port*,
+*port file*, *port source*, *config header*, *port boundary*, *port point*.
+
+"Seam" is a real term, but a narrower one: it comes from Michael Feathers' *Working
+Effectively with Legacy Code* (2004), where it means a place you can alter behaviour
+without editing at that place -- a **testability** concept about substituting behaviour in
+code not designed for it, taxonomised as preprocessor, link and object seams. Nothing in
+that definition is about hardware portability.
+
+The libraries this convention is modelled on all say *port*: FreeRTOS (`portable/`,
+`portmacro.h`, `port.c`), lwIP (porting layer, `sys_arch.c`), TinyUSB (`portable/`), FatFs
+(low-level disk I/O layer, `diskio.c`); ST and Zephyr add *BSP* and *arch/porting layer*.
+Citing those libraries as precedent while calling their pattern something they do not call
+it just makes the docs harder to line up with the sources they came from.
+
+Narrow exception, if it is ever wanted: the weak-default-overridden-by-strong-definition
+trick (`u32_log_timestamp_ms()`) genuinely *is* a link seam in Feathers' sense, since
+behaviour changes at link time with no edit at the call site. Even there, "weak override"
+is plainer.
 
 ## The three tiers
 
@@ -32,13 +54,13 @@ and the answer determines where it lives.
 |---|---|---|---|
 | **Vendored module** | portable API | `App/<module>/` | **never** — copy up/down wholesale |
 | **Vendored leaf** | shared dependency with no module of its own | `App/common/` | **never** |
-| **Seam** | the per-project half of a module's contract | `App/Inc/`, `App/Src/` | **always** |
+| **Port** | the per-project half of a module's contract | `App/Inc/`, `App/Src/` | **always** |
 | **App** | the application itself | `App/Inc/`, `App/Src/` | it's yours |
 
-Seams deliberately sit *with* the application rather than in a directory of their own —
+Port files deliberately sit *with* the application rather than in a directory of their own —
 the FreeRTOS `FreeRTOSConfig.h` / lwIP `lwipopts.h` / FatFs `ffconf.h` arrangement. The
 module ships a documented template; you copy it out and edit it in place. What a
-dedicated directory would have made obvious at a glance is carried instead by the seam
+dedicated directory would have made obvious at a glance is carried instead by the port
 inventory below and by an origin comment at the top of each copied template.
 
 ## The dependency rule
@@ -76,11 +98,11 @@ The same names are used in **all three projects**. Externally sourced libraries 
 exception: `littlefs`, `tlsf`, `berry-lang` and the like keep their upstream identity,
 because that name *is* their identity.
 
-## Seam inventory
+## Port inventory
 
 What to edit after cloning Skeleton, and where each file came from:
 
-| Module | Config header (seam) | Port source (seam) | Templates in |
+| Module | Config header | Port source | Templates in |
 |---|---|---|---|
 | `logging` | `App/Inc/logging_config.h` | `App/Src/logging_port.c` | `App/logging/*_template.*` |
 | `uart_stream` | *(none yet — uses `device_config.h`)* | `App/Src/uart_stream_target_g0b1.c` | — |
@@ -105,10 +127,10 @@ their happenstance landing site; Skeleton is the intended home.)
 Established during the 2026-08-08 migration.
 
 - **Module bundle:** `App/uart_stream/{uart_stream.c,uart_stream.h,queue.c,queue.h}` —
-  family-neutral **except** the register-surface seam in `v_uart_stream_service`, which
+  family-neutral **except** the register-surface port boundary in `v_uart_stream_service`, which
   assumes the FIFO-capable USART IP (ISR/TDR/RDR/ICR + `_RXFNE`/`_TXFNF` bit names).
   G0/C0/G4/L4/L5/U5/H5/H7/WB/WL share it (STM32H723 is a near-drop-in); legacy USARTv1
-  (F1/F2/F4/F7/L1) needs that one surface remapped. Contract + seam are documented in the
+  (F1/F2/F4/F7/L1) needs that one surface remapped. Contract + boundary are documented in the
   header and at the function.
 - **Target table is app-owned and PART-NAMED:** `uart_stream_target_g0b1.c` (convention:
   `_<part>` suffix). It declares the 8 G0B1 UART handles `__attribute__((weak))`, so ONE
@@ -138,7 +160,7 @@ Vendored 2026-08-08. `App/automation_console/`, split into:
 - `automation_console.c` — **portable core**: executive, framing, dispatch, and the
   builtins (quit / list / version / no-op).
 - `automation_commands.c` — **per-app** handlers plus `g_x_acon_command[]`, the table the
-  core dispatches into (the seam, mirroring uart-stream's target table). The core owns the
+  core dispatches into (the port point, mirroring uart_stream's target table). The core owns the
   builtins, so a command module carries only its domain ops.
 
 Handlers own their parsing: they receive the raw line and either call `u8_acon_args()`

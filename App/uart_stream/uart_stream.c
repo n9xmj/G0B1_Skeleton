@@ -113,7 +113,7 @@ static inline void v_uart_stream_tx_arm(uart_stream_instance_t *p_x_inst)
  *       byte would stall higher-priority interrupts.
  */
 /*
- * PORTING SEAM -- family-specific register surface.
+ * PORT BOUNDARY -- family-specific register surface.
  *
  * Everything below assumes the FIFO-capable USART IP (see uart_stream.h,
  * "STM32-family portability"). A port to a legacy USARTv1 family (F1/F2/F4/F7/

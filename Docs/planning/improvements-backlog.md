@@ -81,9 +81,9 @@ stating explicitly because it is the first real test of the design:
 
 - The **nvmparams core** is by definition hardware-independent, so it is portable and
   belongs in Skeleton as a vendored module (`App/nvmparams/`).
-- A **storage driver** is the per-project seam — the D5 pattern, where the module declares
+- A **storage driver** is the per-project port — the D5 pattern, where the module declares
   the interface and the application supplies an implementation. The W25Q128 driver and the
-  nvmparams storage driver that wraps it are seam code.
+  nvmparams storage driver that wraps it are port code.
 
 So SwitchTester carries `App/spiflash/` plus its storage-driver glue, Skeleton carries the
 core and stays clean, and neither needs the other. If that split turns out to be awkward
