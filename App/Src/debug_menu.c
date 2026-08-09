@@ -98,7 +98,41 @@ static void v_debug_wakeup_sleep_test(void)
 
 static void v_debug_quick_test_1(void)
 {
-    printf("Quick test function 1 (stub)\r\n");
+    // Logging API integration test.
+    // Exercises every macro form in log_helpers.h against the vendored module
+    // in App/logging/, and confirms the application-supplied timestamp bridge
+    // (u32_log_timestamp_ms in logging_port.c) is the one being called -- a
+    // weak-default fallback would show (0.000) on every line.
+
+    printf("\r\n--- logging API test ---\r\n");
+
+    // Timestamped + [TAG] forms. LOGCT takes its color from the tag.
+    LOGCT(LOG_SYSTEM, "LOGCT: tag color, value = %d", 42);
+    LOG(LOG_SYSTEM, "LOG: no color, string = %s", "abc");
+    LOGC(LOG_SYSTEM, LOGC_WARNING, "LOGC: explicit color (warning)");
+    LOGC(LOG_SYSTEM, LOGC_ERROR, "LOGC: explicit color (error)");
+
+    // Plain forms: no timestamp, no [TAG] prefix.
+    LOG_PLAIN(LOG_SYSTEM, "LOG_PLAIN: bare text, no prefix\r\n");
+    LOGC_PLAIN(LOG_SYSTEM, LOGC_CYAN, "LOGC_PLAIN: colored, no prefix");
+    LOGCT_PLAIN(LOG_SYSTEM, "LOGCT_PLAIN: tag color, no prefix");
+
+    // Build-gated forms.
+    DPRINTF("DPRINTF: DEBUG-build only, no newline added\r\n");
+    DPRINTF_TS("DPRINTF_TS: DEBUG-build only, timestamped");
+    RPRINTF("RPRINTF: unconditional, survives a release build\r\n");
+
+    // A class set to 0 in logging_config.h compiles out entirely -- this line
+    // should produce no output at all.
+    LOGCT(LOG_JOBS, "LOG_JOBS is disabled; you should NOT see this");
+
+    // Two timestamps a known interval apart. The delta proves the tick is
+    // real and advancing rather than a stuck constant.
+    LOGCT(LOG_SYSTEM, "timestamp check: t0");
+    v_delay_ms(250);
+    LOGCT(LOG_SYSTEM, "timestamp check: t0 + 250 mS");
+
+    printf("--- end logging API test ---\r\n");
 }
 
 static void v_debug_quick_test_2(void)

@@ -4,13 +4,14 @@
 module, and replace its per-class on/off booleans with a compile-time **log level**
 scheme that folds away when a message is below threshold.
 
-**Code home:** `App/Inc/logging.h`, `App/Src/logging.c`, `App/Inc/debug_config.h`,
-`App/Inc/ANSI.h` today → `App/logging/` + `App/common/` + seam files in `App/Inc`.
+**Code home:** `App/logging/` (engine + sugar + templates), `App/common/ANSI.h` (vendored
+leaf), `App/Inc/logging_config.h` + `App/Src/logging_port.c` (app-owned seams). Was
+`App/Inc/logging.h`, `App/Src/logging.c`, `App/Inc/debug_config.h`, `App/Inc/ANSI.h`.
 
 **Parent docs:** [`portable-apis-strategy.md`](portable-apis-strategy.md) (conventions),
 [`improvements-backlog.md`](improvements-backlog.md) (items 1 and 2 are this work).
 
-**Status:** PLANNING
+**Status:** IMPLEMENTING — phase 1 complete and bench-verified; phase 2 (the ladder) next
 
 **Working mode:** decision-log model — one question at a time in chat, everything else
 parked on the board below. Agent never silently resolves a 🔴 or 🟡.
@@ -50,17 +51,19 @@ the levels run on; that is D1 and it blocks all implementation.
 | **S1** | 🟡 | What "logging off" means — level NONE, not empty macros |
 | **S2** | 🔵 | Severity ↔ colour interaction — does severity override the class colour? |
 | **S3** | 🟢 | Dissolved by D1's reversal — one guard, `0` means quiet on both sides |
-| **I1** | 🟡 | Adopt the three-layer split: engine / sugar / template |
+| **I1** | 🟢 | Three-layer split adopted: engine / sugar / template |
 | **I2** | 🟢 | Seam files live in `App/Inc` + `App/Src`, edited in place |
-| **I3** | 🟡 | `platform.h` as the single app-provided contract header for vendored modules |
+| **I3** | 🟢 | Timestamp reaches the module via an app-defined extern (superseded by D5) |
 | **I4** | 🟡 | Wrap all macros in `do { } while (0)` |
-| **I5** | 🟡 | Make `ANSI.h` includes explicit in consumers (currently transitive) |
-| **I6** | 🟡 | Reconcile the two diverged `ANSI.h` copies; Skeleton becomes canonical |
-| **I7** | 🟡 | `platform.h` housekeeping — stale `MACROS_H` guard (LL includes are intentional) |
+| **I5** | 🟢 | `ANSI.h` include CASE normalised — not a missing include, as first recorded |
+| **I6** | 🟢 | `ANSI.h` copies reconciled; Skeleton canonical, include guard added |
+| **I7** | 🟢 | `platform.h` guard renamed to `PLATFORM_H`; LL includes retained |
 | **I8** | 🟡 | NVM auto-commit delay defined twice, in two units, in two files |
-| **I9** | 🟡 | `PRINTF_ATTR` defined in both `logging.h` and `log_helpers.h` |
+| **I9** | 🟢 | `PRINTF_ATTR` now defined once, in `logging.h` |
 | **I10** | 🟢 | Call-site sweep — none needed; D1 leaves every existing call site unchanged |
 | **I11** | 🟡 | Existing vendored modules already violate the dependency rule |
+| **I12** | 🟡 | `ANSI_FG_RGB` / `ANSI_BG_RGB` are missing the trailing `m` and cannot render |
+| **I13** | 🟢 | `DPRINTF_TS` called a nonexistent function; never used, so never caught |
 | **T1** | 🟡 | Fold the tier model into `portable-apis-strategy.md` |
 | **T2** | 🟡 | Seam inventory table — which app file is which module's seam |
 | **T3** | 🟡 | Port `decision-log-model.md` into this repo's `Docs/planning/` |
@@ -746,16 +749,26 @@ anyway; S1 removes the empty-expansion half of the hazard independently.
 
 **Status:** 🟡 · **Needs user:** no
 
-**Question:** `menusystem.c` uses `ANSI_*` macros but never includes `ANSI.h` — it gets
-them through `debug_config.h` → `logging.h` → `ANSI.h`.
+**Question, as first recorded:** `menusystem.c` uses `ANSI_*` macros but never includes
+`ANSI.h`, relying on a transitive path through `logging.h`.
 
-**Leaning / recommendation:** add the explicit include. This is latent breakage: the day
-`logging.h` stops needing ANSI (plausible — colour emission arguably belongs in
-`logging.c`), three unrelated files across two projects stop compiling for reasons that
-have nothing to do with logging. Same fix for `term.c` and `debug_menu.c` when this reaches
-LED_Strip.
+**Correction.** That was wrong — an artefact of a case-sensitive grep for `ANSI\.h`. The
+includes were there all along, just spelled inconsistently:
 
-**Resolution:** _(pending)_
+| File | Spelling |
+|---|---|
+| `logging.h` (both projects) | `#include "ANSI.h"` |
+| `menusystem.c` (Skeleton) | `#include "ansi.h"` |
+| `debug_menu.c`, `term.h` (LED_Strip) | `#include "ansi.h"` |
+
+The real defect is therefore not a missing include but a **case mismatch against the actual
+filename**, which resolves on Windows and NTFS and fails outright on a case-sensitive
+filesystem — Linux CI, WSL, a Docker build. That matters more for a module intended to
+travel than the transitive-dependency concern did.
+
+**Resolution:** normalised every spelling to `ANSI.h`, matching the file. Done in Skeleton;
+`debug_menu.c` and `term.h` need the same when this reaches LED_Strip (W3). The header of
+the reconciled `ANSI.h` states the rule so it does not drift back.
 
 ---
 
@@ -892,6 +905,51 @@ written into the strategy doc (T1), so the doc describes something true.
 
 ---
 
+### I12 — `ANSI_FG_RGB` / `ANSI_BG_RGB` cannot render
+
+**Status:** 🟡 · **Needs user:** yes (trivial, but it is a behaviour change)
+
+**Question:** the 24-bit colour forms are missing the trailing `m` that terminates an SGR
+sequence:
+
+```c
+#define ANSI_FG_RGB(r,g,b)   CSI_S "38;2;" #r ";" #g ";" #b      // no "m"
+#define ANSI_FG_RGB_FMT      CSI_S "38;2;%u;%u;%u"               // no "m"
+```
+
+Emitted as-is, a terminal sees an unterminated CSI and swallows whatever text follows until
+it finds a final byte. The 256-colour forms directly above them (`ANSI_FG_FMT` and friends)
+all have it, so this is an omission rather than a convention.
+
+Pre-existing in **both** project copies and used **nowhere**, so nothing is broken today.
+Not fixed during phase 1, which was scoped to no behaviour change — flagged in a comment at
+the definitions instead.
+
+**Leaning / recommendation:** add the `m` to all four macros. It cannot regress anything
+that works, since nothing currently calls them and they could not have worked if it did.
+
+**Resolution:** _(pending)_
+
+---
+
+### I13 — `DPRINTF_TS` called a function that does not exist *(resolved)*
+
+**Status:** 🟢 · **Needs user:** no
+
+**Question:** Skeleton's `debug_config.h` defined `DPRINTF_TS` to call
+`v_log_printf_ts()`. No such function exists — the real one is `v_log_printf_time()`.
+
+Any use of the macro in a `DEBUG` build would have failed to compile. It survived because
+`DPRINTF` and `DPRINTF_TS` are used in **no source file in the tree**; the earlier count of
+"3 uses" was matching the definitions and their comments, not call sites. LED_Strip's
+`log_helpers.h` already had it right, so the two copies had silently diverged on a defect.
+
+**Resolution:** the vendored `log_helpers.h` takes LED_Strip's correct form. Not a
+behaviour change — code that cannot compile has no behaviour. Now exercised by the quick
+test hook and confirmed working on the bench (`(11.312) DPRINTF_TS: ...`).
+
+---
+
 ### T1 — Fold the tier model into the strategy doc
 
 **Status:** 🟡 · **Needs user:** no
@@ -944,10 +1002,24 @@ Skeleton is the starter project, so the model should ship with it.
 
 **Proposed implementation phases**, once enough rows are 🟢:
 
-1. **Reorganise** — create the module directory (D2), three/four-layer split (I1), move
-   `ANSI.h` (D3), explicit includes (I5), `ANSI.h` reconcile (I6), the timestamp port hook
-   (I3/D5), `logging_config.h` rename + flag deletions (D6), fold `DEBUG_MENU` and delete
-   `debug_config.h` (D7), `platform.h` guard rename (I7). No behaviour change.
+1. **Reorganise — ✅ DONE 2026-08-09, commit `59a46d1`, branch `feature/logging-api`.**
+   Module directory (D2), three-layer split (I1), `ANSI.h` moved and reconciled (D3, I6),
+   include case normalised (I5), timestamp port hook (I3/D5), `logging_config.h` rename +
+   dead-flag deletions (D6), `DEBUG_MENU` folded and `debug_config.h` deleted (D7),
+   `platform.h` guard (I7), `PRINTF_ATTR` de-duplicated (I9), `DPRINTF_TS` typo (I13).
+
+   **Verification.** Clean build, 0 errors / 0 warnings. Size against the pre-change
+   baseline built from `HEAD` in a throwaway worktree: `text 31528 → 31536` (**+8**),
+   `data` and `bss` unchanged. The 8 bytes are exactly `logging_port.o`'s
+   `u32_log_timestamp_ms`; `nm` and the map confirm the app's **strong** definition
+   overrode the module's weak default (`T` at `0x08000aa0`, from `./App/Src/logging_port.o`).
+
+   Bench-verified on the NUCLEO-G0B1RE (ST-Link `0671FF485251667187121242`, COM3 @ 921600)
+   via the new logging test on debug-menu key `q`. All macro forms correct; tag colours
+   resolve (`38;5;13` = `LOGC_BRIGHT_MAGENTA`); plain forms carry no timestamp or tag;
+   `LOG_JOBS` at `0` emitted **nothing**, confirming the compile-time fold; and timestamps
+   advance truthfully — `(11.314)` → `(11.564)` across a `v_delay_ms(250)`, proving the
+   application bridge is live rather than the weak default's `0.000`.
 2. **Levels** — the D1 verbosity ladder, S3's `LOG_EMIT()` predicate, S1's removal of the
    empty-macro block
    (and the matching move of the tag triplets out of `#if DEBUG_LOGGING`), I4's `do/while`
@@ -963,10 +1035,10 @@ class set to `LOG_LEVEL_DISABLED`. Worth checking specifically that the **format
 literals** of eliminated calls leave `.rodata`, which is the part that most often survives
 dead-code elimination.
 
-**Plan status summary:** 🔴 0 · 🟡 11 · 🟢 10 · 🔵 2 — 23 rows.
+**Plan status summary:** 🟡 8 · 🟢 16 · 🔵 2 — 26 rows.
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.
-**Next action:** build phase 1.
+**Next action:** phase 2 — the verbosity ladder (D1), the LOG_EMIT predicate (S3), the empty-macro removal (S1) and the do/while wrapper (I4).
 
 **End of logging-api-plan.md**
