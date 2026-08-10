@@ -35,6 +35,21 @@ Create or extend a plan when:
 
 For small one-shot fixes, skip the plan and just do the work.
 
+### Who starts one
+
+**Board requests are generally initiated by the user, and the decision to build and use
+a Big Board is theirs.** An agent may *suggest* one, once, when either signal appears:
+
+- more than **3** distinct issues or questions in a single prompt/response, or
+- the user has **not responded to a query after multiple asks**.
+
+Those are the signs that complexity is outgrowing what ordinary back-and-forth chat can
+carry. Suggest it and move on; do not create a board unprompted, and do not re-suggest.
+
+The second signal is the more reliable one in practice. An unanswered question is rarely
+refusal -- it usually means the reply arrived carrying other material that crowded the
+question out, which is exactly the failure a board is for.
+
 ---
 
 ## Document layout
