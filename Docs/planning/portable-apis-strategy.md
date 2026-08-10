@@ -81,6 +81,13 @@ definition in the module so a freshly-vendored copy links and runs before any po
 has been written (`u32_log_timestamp_ms()` returns 0); where none does, use a weak
 declaration plus a null guard at the call site (`PUMP_POLLING_TASK()`).
 
+**The port layer is OPTIONAL.** A module that needs nothing from the application has no
+port half at all, and vendoring it is simply *copy the directory and call its public
+functions from the right places*. `menusystem` is the example: C library only, no config
+required, no externs to satisfy. Do not invent a config header or a port source for a
+module that does not need one -- an empty port is a property of a well-scoped module, not
+an omission to be filled in.
+
 **Status:** `logging` satisfies this rule today. `uart_stream` and `automation_console`
 do **not** yet — `automation_console.{c,h}` include `device_config.h`, and
 `uart_stream.h` and `queue.c` include `main.h`. The retrofit is deferred until it blocks
@@ -104,13 +111,16 @@ because that name *is* their identity.
 
 ## Port inventory
 
-What to edit after cloning Skeleton, and where each file came from:
+What to edit after cloning Skeleton, and where each file came from. **"none needed"** and
+**"none yet"** differ: the first means the module requires nothing from the application,
+the second is a conformance gap (I11).
 
 | Module | Config header | Port source | Templates in |
 |---|---|---|---|
 | `logging` | `App/Inc/logging_config.h` | `App/Src/logging_port.c` | `App/logging/*_template.*` |
 | `uart_stream` | *(none yet — uses `device_config.h`)* | `App/Src/uart_stream_target_g0b1.c` | — |
 | `automation_console` | *(none yet — uses `device_config.h`)* | `App/automation_console/automation_commands.c` | — |
+| `menusystem` | *(none needed)* | *(none needed)* | — |
 
 The "none yet" cells are exactly what I11 would fix: those two modules should gain
 `uart_stream_config.h` and `automation_console_config.h` rather than reaching into the

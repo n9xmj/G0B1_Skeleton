@@ -144,7 +144,11 @@ are designated initialisers:
 | Skeleton | **69** | `debug_menu.c` 35, `menusystem.c` 26, header 8 |
 | SwitchTester | **154** | `debug_menu.c` **120**, `menusystem.c` 26, header 8 |
 
-Also needed: a `menusystem_config.h` for the prompt macro, and the three `.cproject` files.
+Only the three `.cproject` files besides. **No port layer is needed** -- menusystem takes
+nothing from the application, so vendoring it is just *copy the directory and call its
+public functions in the right places*. A `menusystem_config.h` is **optional**: the prompt
+macro is already `#ifndef`-guarded, so a project wanting a different prompt can `-D` it or
+define it ahead of the include. Do not create a config header just to have one.
 
 **Accepted trade:** both copies have the key-conflict check, but Skeleton's colours the
 warning via `ANSI_FG_YELLOW` and LED_Strip's does not. The warning goes monochrome — which
