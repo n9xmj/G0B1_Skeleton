@@ -1239,16 +1239,17 @@ dead-code elimination.
 
 ### T4 — Per-module README.md, one per vendored library
 
-**Status:** 🟡 · **Needs user:** no
+**Status:** 🟡 · **Needs user:** no — **3 of 5 done 2026-08-12**; `menusystem` and
+`nvmparams` wait on their modules existing.
 
 Requested by the user 2026-08-12. Every library this effort has vendored gets its own
 `README.md`, in its own directory:
 
 | Module | README lives at | State |
 |---|---|---|
-| `logging` | `App/logging/README.md` | to write |
-| `uart_stream` | `App/uart_stream/README.md` | to write |
-| `automation_console` | `App/automation_console/README.md` | to write |
+| `logging` | `App/logging/README.md` | ✅ **written 2026-08-12** |
+| `uart_stream` | `App/uart_stream/README.md` | ✅ **written 2026-08-12** |
+| `automation_console` | `App/automation_console/README.md` | ✅ **written 2026-08-12** |
 | `menusystem` | `App/menusystem/README.md` | when the module exists (backlog 5) |
 | `nvmparams` | `App/nvmparams/README.md` | **when we turn to it** (backlog 3) |
 
@@ -1266,6 +1267,10 @@ Per-module contents: file manifest marking vendored vs adopter-owned; the config
 knob table; the port/hook list, or an explicit "none needed"; a minimal integration
 snippet; and **measured gotchas** — e.g. `uart_stream`'s CubeIDE indexer trap and its two
 family boundaries, `automation_console`'s RX-ring vs `ACON_LINE_MAX` constraint.
+
+**The README travels with the module.** It lives in the module's own directory, so it is
+byte-identical across every project carrying that module and gets copied along with the
+sources. LED_Strip has no `automation_console`, so it has no copy of that one.
 
 **Sequencing:** written AFTER a module settles. `uart_stream`'s README would have needed
 rewriting twice had it been started before its config header landed. Tracked in parallel as
