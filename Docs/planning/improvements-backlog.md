@@ -180,25 +180,40 @@ integration snippet; and a "measured gotchas" section — e.g. uart_stream's Cub
 trap and its two family boundaries, automation_console's RX-ring-vs-`ACON_LINE_MAX`
 constraint.
 
-## 7. LED_Strip's uart_stream — API migration, not a back-port
+## 7. LED_Strip's uart_stream — re-vendor from the G0B1 pair
 
-Found 2026-08-12 while closing I11. LED_Strip carries an **older generation** of
-`uart_stream` with a genuinely different public API:
+Found 2026-08-12 while closing I11; **resized the same day after actually counting.** An
+earlier draft of this item claimed "~1,600 of 1,610 lines differ, a migration with
+call-site changes throughout." The line count was real but **textual** — doc-comment style,
+banners, formatting — and it badly overstated the job. Corrected below.
 
-| Skeleton / SwitchTester | LED_Strip |
-|---|---|
-| `b_uart_stream_service_uart(huart)` | `v_uart_stream_isr()` / `v_uart_stream_isr_for(inst)` |
-| `b_uart_stream_tx_byte_blocking()` — returns bool | `v_uart_stream_tx_byte_blocking()` — void |
-| `u16_uart_stream_tx_multi_blocking()` — returns count | `v_uart_stream_tx_multi_blocking()` — void |
-| `v_uart_stream_tx_flush_timeout()` + `v_uart_stream_tx_flush()` | `v_uart_stream_tx_flush_blocking()` |
-| target table + `g_x_uart_stream_target[]` | none |
-| ISR service counters, `p_x_uart_stream_valid()` | none |
-| baud getter/setter | none |
+**Actual call sites outside `App/uart_stream/`: five.**
 
-About **1,600 of 1,610 lines differ** across the four files — `queue.{c,h}` too, which are a
-different vintage with different doc style and a `platform.h` include.
+```
+v_uart_stream_isr_for              1
+v_uart_stream_tx_byte_blocking     3
+v_uart_stream_tx_multi_blocking    1
+```
 
-So this is not the "back-port the baud work" item it was assumed to be. It is a re-vendor
-with call-site changes throughout LED_Strip, and there is **no G474 on the bench**, so it
-would be build-verified only. Sequence it on its own, and decide up front whether
-build-verification is acceptable or whether it waits for hardware.
+**What genuinely differs:**
+
+| | LED_Strip | Skeleton / SwitchTester |
+|---|---|---|
+| Flush | unbounded spin ×2, no timeout | caller drain bound + TC bound derived from live baud |
+| Vector mapping | `static e_uart_stream_get_irqn()` INSIDE the module, hardcoded, `HardFault_IRQn` on no-match | app-owned `uart_stream_target_<part>.c`, weak handles |
+| ISR entry | `v_uart_stream_isr()` services all; `v_uart_stream_isr_for()` linear-searches | `b_uart_stream_service_uart(huart)` returns bool so shared vectors chain |
+| Blocking calls | `void` | return bool/count — a timeout is detectable |
+| Queue | heap `p_x_queue_create`/`v_queue_destroy`, `*_blocking` variants | `*_isr` variants skipping PRIMASK where an ISR cannot be preempted |
+| Baud get/set, ISR service counters | absent | present |
+
+**The vector map is the real work, and the reason the split happened.** LED_Strip's ladder
+is G4-shaped — `USART3_IRQn`, `UART4_IRQn` as distinct vectors — whereas the G0B1 shares
+`USART3_4_5_6_LPUART1_IRQn` across five UARTs. Writing `uart_stream_target_g474.c` is the
+bulk of the job.
+
+**Safety note worth acting on regardless:** LED_Strip's `v_uart_stream_tx_flush_blocking()`
+spins on queue-empty and then on TC with **no bound on either**, so a wedged peripheral
+hangs the main loop permanently. That alone may justify the swap.
+
+**Blocker, not a task:** there is no G474 on the bench, so this is build-verified only.
+Decide up front whether that is acceptable or whether it waits for hardware.
