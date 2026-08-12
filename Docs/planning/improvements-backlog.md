@@ -49,56 +49,131 @@ nothing else. The compile-time fold was measured, not assumed — a `QUIET` buil
 guarded code *and* its format-string literals from `.rodata`. See D1/S3 in
 [`logging-api-plan.md`](logging-api-plan.md).
 
-## 3. nvmparams → own subdir AND fully HW-independent
+## 3. nvmparams — vendored module + pluggable storage drivers
 
-**Sequenced LAST, deliberately** (user, 2026-08-09): it needs the most planning
-investment, and the design is still evolving. Do the low-hanging packaging jobs
-(item 5) first.
+**NEXT BIG THING, and it gets its OWN SESSION** (user, 2026-08-12). The user is doing
+high-level design thinking first and will relay decisions at the start of that session.
+**Do not pre-empt those decisions.** This section is the cold-start brief: what is known,
+what is measured, and what is explicitly still open.
 
-**This one gets the full decision-log board** (`Docs/planning/nvmparams-plan.md`), and
-the user expects to **interrupt frequently to revise and extend the wish list**. That is
-the intended working mode here, not a sign of churn: park every open point as a row,
-keep the board current as they revise, and do not try to close design questions on their
-behalf. Contrast item 5, which is mechanical and wants no board at all.
+**This one gets the full decision-log board** (`Docs/planning/nvmparams-plan.md`, not yet
+created — building it is the first act of the new session, once the user relays their
+high-level shape). The user expects to **interrupt frequently to revise and extend the
+wish list**. That is the intended working mode, not churn: park every open point as a row,
+keep the board current, and do not close design questions on their behalf.
 
-Migrate to `App/nvmparams/`, then add a **pluggable storage-driver** layer so the pool has
-no dependency on the NVM hardware. The caller attaches read/write "drivers" at pool init
-via a standardized prototype, for any backend: STM internal flash, SPI/I2C flash,
-filesystem (stdio) file, RTC backup memory, RAM-emulated, etc. `nvm_pool_init` also takes
-more metadata: device/file label or identifier, sector-or-file offset address, block size
-to reserve for the pool, and the like. The **core semi-linked-list pool management is
-solid** and needs little change — the work is the device interface + the extra init
-metadata.
+---
 
-Known gotcha to keep in mind: a NOLOAD NVM sector survives a reflash, so a foreign
-project's pool can shadow your IDs (this is not an nvmparams bug).
+### What the user has already decided (stated 2026-08-12)
+
+1. **Make it a vendored module**, same pattern as `logging` / `uart_stream` /
+   `automation_console`. So: `App/nvmparams/`, a `nvmparams_config_template.h`, and a
+   README per T4.
+2. **Adopter-supplied "device drivers" for any non-volatile backend** — STM internal
+   flash, SPI or I2C external flash/EEPROM, a file via C stdio / a user-provided
+   filesystem, RTC backup RAM, and **NVM-emulated-in-RAM**. That last one is deliberate:
+   it doubles as the **degenerate how-to example** for writing a driver.
+3. **`x_nvm_init` takes a struct**, not a parameter list — pool settings *including the
+   driver function pointers* arrive in one struct. **TBD:** whether that struct IS the
+   pool handle, or a separate public-facing settings struct the pool copies from.
+4. **Stretch goal: very basic wear levelling.**
+5. **Review the present implementation for correctness and robustness** as part of the
+   work — this is not purely a repackaging job.
+
+### The two main decision points, in the user's words
+
+- **How to structure the device drivers.**
+- **What parameters the pool init function must be given.**
+
+Everything else is downstream of those two.
+
+---
+
+### Current state — measured 2026-08-12, so the new session need not re-derive it
+
+| Fact | Value |
+|---|---|
+| Location | `App/Src/nvmparams.c` + `App/Inc/nvmparams.h` — **not yet a module directory** |
+| Size | 912 lines `.c`, 299 lines `.h` |
+| Present in | G0B1_Skeleton, SwitchTester. **Absent from LED_Strip.** |
+| Call sites | 9 in Skeleton, 42 in SwitchTester |
+| Public API | `x_nvm_pool_init`, `_pool_release`, `_create`, `_delete`, `_get`, `_get_size`, `_set`, `_commit`, `_list`, `_search`, `_read`, `_write` |
+| Current init | `x_nvm_pool_init(&pool, NVM_DEVICE_MCU_FLASH, NULL, NVM_DATA_POOL_SIZE)` — 4 positional args, the thing decision 3 replaces |
+| HW coupling | Concentrated and small: `HAL_FLASH_Unlock/Lock`, `HAL_FLASHEx_Erase`, `HAL_FLASH_Program` (`FLASH_TYPEPROGRAM_DOUBLEWORD`), a `FLASH_PAGE()` macro over `FLASH_BASE` / `FLASH_PAGE_SIZE` |
+
+**The two copies are NOT meaningfully diverged.** A raw diff reads 1829 lines in the `.c`
+and 621 in the `.h`, but that is line-ending noise — **whitespace-insensitive it is 7 and
+23**. Do not be alarmed by the raw number; it vanishes once the working trees are
+converted to LF (see `.gitattributes`, added 2026-08-12).
+
+The genuine differences are exactly two, and **both are informative**:
+
+- **`NVM_ERROR_NO_CHANGE` (-8)**, SwitchTester only. Lets a caller distinguish "committed"
+  from "nothing to commit". The pool's whole purpose is minimising erase/write cycles, and
+  that is only visible if the two outcomes are distinguishable. **This belongs in the
+  core** — take SwitchTester's version as the baseline for it.
+- **SwitchTester's application parameter IDs live in the module header's enum**
+  (`NVM_PARAM_SWITCH_PULSE_MS`, the twelve `NVM_PARAM_CYCLE_*`). Which is the finding:
+
+> **The parameter-ID enum is application data sitting inside what will be a vendored
+> header.** It has to move to the adopter's side — same class of problem as
+> `ACON_MAX_ARGS` living in `.cproject` and `ACON_LINE_MAX` in `device_config.h`, both
+> fixed the same day. Note SwitchTester's IDs carry a documented contiguity contract
+> guarded by `_Static_assert` in `switch_out.c`, so wherever they land must preserve
+> arithmetic ID computation.
+
+### A driver interface already exists in embryo
+
+Worth reading before designing the replacement, because the refactor **formalises
+something already there** rather than inventing it:
+
+- `x_nvm_read()` / `x_nvm_write()` are already the device hooks, and the header already
+  names `x_mcuflash_read()` / `x_mcuflash_write()` as "device drivers".
+- `NVM_DEVICE_MCU_FLASH`, `NVM_DEVICE_FILE`, `NVM_DEVICE_NONE`, `NVM_DEVICE_MAXVAL`
+  already exist as an enum — an early sketch of the same idea.
+- But today the header instructs: *"The API user is responsible for modifying this routine
+  to support ... the storage device(s) that will be used."* **Editing the module to add a
+  backend is precisely what the pluggable layer removes.** There is also a stray
+  `#define SPIFLASH_NVM_DATA_ADDRESS 0x0400` in the `.c` — evidence of a second backend
+  half-started in place.
+
+**The core semi-linked-list pool management is solid** and needs little change. The work is
+the device interface, the init metadata, and decision 5's correctness review.
 
 ### Test hardware and where the SPI flash driver lands
 
-**A W25Q128 is now physically attached to the G0B1 bench platform** (user, 2026-08-09).
-It is not needed for any application function — it is there specifically so the pluggable
-storage-driver layer can be exercised against a *real* second backend rather than only
-against internal flash. That matters: a driver interface validated against one backend
-tends to encode that backend's assumptions.
+**A W25Q128 is physically attached to the G0B1 bench platform.** It serves no application
+function — it is there so the pluggable driver layer can be exercised against a *real*
+second backend rather than only internal flash. That matters: a driver interface validated
+against one backend tends to encode that backend's assumptions.
 
 Driving it needs the **core SPI flash driver** from `LED_Strip_Controller_G474`
-(`App/spiflash/`) — the raw chip driver only, **not** the partition table or the VFS/
-littlefs layers stacked on top of it there.
+(`App/spiflash/`) — the raw chip driver only, **not** the partition table or the
+VFS/littlefs layers stacked on it there.
 
 **Landing site: SwitchTester, not Skeleton** (user preference — keep the SPI flash API out
-of the Skeleton baseline). That preference and the architecture agree, which is worth
-stating explicitly because it is the first real test of the design:
+of the Skeleton baseline). Preference and architecture agree, which is worth stating
+because it is the first real test of the design:
 
-- The **nvmparams core** is by definition hardware-independent, so it is portable and
-  belongs in Skeleton as a vendored module (`App/nvmparams/`).
-- A **storage driver** is the per-project port — the D5 pattern, where the module declares
-  the interface and the application supplies an implementation. The W25Q128 driver and the
-  nvmparams storage driver that wraps it are port code.
+- The **nvmparams core** is hardware-independent by definition, so it is portable and
+  belongs in Skeleton as `App/nvmparams/`.
+- A **storage driver** is the per-project port — module declares the interface,
+  application supplies the implementation. The W25Q128 driver and its nvmparams glue are
+  port code.
 
-So SwitchTester carries `App/spiflash/` plus its storage-driver glue, Skeleton carries the
-core and stays clean, and neither needs the other. If that split turns out to be awkward
-in practice, the awkwardness is telling us something about the driver interface, which is
-exactly what the bench part is for.
+So SwitchTester carries `App/spiflash/` plus glue, Skeleton carries the core and stays
+clean, neither needs the other. **If that split turns out awkward in practice, the
+awkwardness is telling us something about the driver interface** — which is exactly what
+the bench part is for.
+
+### Carried-over gotchas
+
+- **A NOLOAD NVM sector survives a reflash**, so a foreign project's pool can shadow your
+  IDs. Not an nvmparams bug, but it will waste an afternoon if met cold.
+- **I8 (parked from the logging plan):** the NVM auto-commit delay is defined in two
+  places — `DEV_CONFIG_NVM_COMMIT_DELAY_MS` in `device_config.h` and
+  `NVM_AUTO_COMMIT_DELAY` in `platform.h`. Resolve as part of this work; the user chose to
+  keep the `device_config.h` one.
 
 ## 4. Wire i_getline to self-mute stdout
 
