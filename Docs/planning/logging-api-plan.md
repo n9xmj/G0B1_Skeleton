@@ -83,6 +83,7 @@ refactor (I8), and a deferred runtime-level idea (D4/W1).
 | **T1** | 🟢 | Tier model, dependency rule and naming folded into `portable-apis-strategy.md` |
 | **T2** | 🟢 | Port inventory table added to `portable-apis-strategy.md` |
 | **T3** | 🟢 | `decision-log-model.md` ported into this repo |
+| **T4** | 🟡 | Per-module `README.md` adoption guide for every vendored lib, nvmparams included |
 
 ## Wish list (v2+)
 
@@ -581,9 +582,9 @@ Debug configuration's actual `-O` setting before treating it as theoretical.
 
 ---
 
-### S2 — Severity ↔ colour interaction
+### S2 — Severity ↔ colour interaction *(resolved)*
 
-**Status:** 🔵 blocked on D1 · **Needs user:** no yet
+**Status:** 🟢 · **Needs user:** no
 
 **Question:** colour is currently per-class (`LOG_SYSTEM_COLOR`). Once severity exists,
 should an error print red regardless of which class raised it?
@@ -591,9 +592,14 @@ should an error print red regardless of which class raised it?
 **Leaning / recommendation:** dissolved by D1. Under (A) a class has exactly one severity
 *and* one colour, so `LOG_<CLASS>_COLOR` already tracks severity by construction — pick
 `LOGC_ERROR` for classes set to `LOG_LEVEL_ERROR` and so on, purely by convention in
-`debug_config.h`. No macro change, nothing to decide.
+`logging_config.h`. No macro change, nothing to decide.
 
-**Resolution:** no action — the question only existed under options B and C.
+**RESOLVED by the user 2026-08-12: no change from present behaviour.** Severity does not
+influence colour. **`LOG_<CLASS>_COLOR` is the single source of truth for colour**, at
+least for `LOGC` and `LOGCT`. A class set to `LOG_LEVEL_ERROR` prints in whatever colour
+its `_COLOR` says, and nothing in the macros inspects the tier to override it. Keeping the
+two aligned is a convention followed when editing `logging_config.h`, not a rule the code
+enforces.
 
 ---
 
@@ -660,7 +666,7 @@ build.
 
 ### S4 — stdio-retarget contract differs across the three projects
 
-**Status:** 🔵 deferred · **Needs user:** not yet
+**Status:** 🟡 assessed, sequenced behind 7a · **Needs user:** no
 
 **Question:** raised by the user 2026-08-09. Skeleton and SwitchTester retarget stdio via
 `stdio_retarget.c`; LED_Strip uses `__io_putchar()` / `__io_getchar()`. Should LED_Strip be
@@ -686,17 +692,65 @@ Skeleton returns `-1` on an empty ring; LED_Strip returns `0` bytes, and `fs_she
 depends on that ("returns 0 when the RX ring is empty — same as a 0x00 data byte"). Code
 that reads stdin will misbehave silently if ported without adjustment.
 
-**Leaning / recommendation:** **defer — but not on difficulty.** Adding the mute to
-LED_Strip's existing fd-1 branch is ~20-30 lines and needs no architectural change. The
-reason to wait is that nothing in LED_Strip *consumes* it: the mute exists to protect a
-SCRIPT frame stream, and LED_Strip has no automation console. Building it now is
-speculative.
+**USER DECISION 2026-08-12.** LED_Strip needs fds beyond stdin/out/err because it carries a
+VFS + littlefs filesystem handler the other two do not. That is not going away, and the
+other projects will only need it if they ever grow file I/O. The stdout mute and
+cursor-column tracker SHOULD exist in LED_Strip, present but unwired, so the wiring is a
+call site later rather than a change to the syscall layer.
 
-Better framing than "port `stdio_retarget.c` into LED_Strip": converge the **contract** —
-fd routing, stderr always-through, mute semantics, `_read` return convention — and let each
-project keep its back-end, since one has a filesystem and the others do not. That likely
-makes stdio-retarget a fifth vendored API, but a thin one. Belongs in
-`portable-apis-strategy.md` when T1 is written.
+The open question was the magnitude and regression risk of moving LED_Strip off
+`__io_putchar()` / `__io_getchar()` onto the `stdio_retarget.c` shape, given the concern
+that it is a large change.
+
+**ASSESSMENT 2026-08-12 "+em+" the semantics are nearly free; the STRUCTURE is the work.**
+
+The `_read` return-convention trap this row has warned about since 2026-08-09 turns out
+**not to apply to LED_Strip's actual code.** Every stdin consumer is already written
+defensively "+em+" audited, all six:
+
+| Site | Test | Survives `-1`? |
+|---|---|---|
+| `utils.c` `i_getchar_blocking` | `while (i_char <= 0)` | yes |
+| `debug_menu.c:2261` | `if (i_key <= 0) break` | yes |
+| `fs_shell_hrn.c:674` | `if (i_ch <= 0) continue` | yes |
+| `term.c:144` | `if (i_ch > 0)` | yes |
+| `term.c:306` | `if (i_ch > 0) break` | yes |
+| `term.c:572` | `if (i_ch == ESC)` | yes |
+
+The two `i_getchar_blocking` implementations differ by ONE character "+em+" Skeleton spins on
+`< 0`, LED_Strip on `<= 0` "+em+" and LED_Strip's is the tolerant one, accepting both
+conventions. So `i_getline` and its six call sites need no change at all. The only casualty
+is the docstring at `term.c:111` ("returns 1..255, or 0 when nothing now"), which becomes
+wrong; no consumer of it tests `== 0`.
+
+`fs_shell_hrn.c`'s dependency, which this row previously cited as the blocker, is **stale**:
+its binary path already bypasses stdio entirely via `i16_uart_stream_rx_byte()`. The comment
+there explains the bypass rather than a dependency on it.
+
+**What IS real work "+em+" the syscall collision.** `stdio_retarget.c` and `syscalls_vfs.c` both
+define `_write`, `_read`, `_close`, `_lseek`, `_fstat`, `_isatty`. The vendored versions
+return `-1/EBADF` for fd >= 3, which is exactly where LED_Strip's littlefs lives. So this is
+NOT a drop-in "+em+" the module needs a port point for unknown fds:
+
+> `stdio_retarget.c` gains weak `i_stdio_vfs_*()` defaults returning `-EBADF`;
+> `syscalls_vfs.c` supplies strong overrides that route to littlefs. Same weak-default /
+> strong-override pattern as logging's `u32_log_timestamp_ms()`, and it is what turns
+> stdio-retarget into the fifth vendored module rather than a copied file.
+
+**Convergence should run BOTH ways here.** LED_Strip's `__io_putchar_stderr` is a deliberate
+separate port point so stderr can later be re-aimed at semihosting or a VFS tty (plan W15).
+`stdio_retarget.c` has no such indirection "+em+" it hard-routes stderr to the same stream.
+Migrating naively would LOSE that capability. The vendored module should gain the stderr
+port point, not LED_Strip give it up.
+
+**Magnitude:** roughly 150 lines moved or added, six new weak hooks, three now-dead
+functions removed from `app_main.c`, one docstring corrected. Regression surface is one
+boot plus an fs_shell binary transfer "+em+" far smaller than the row previously implied.
+
+**SEQUENCING, and this is the part that matters:** do NOT start until item 7a
+(`improvements-backlog.md`) is closed. LED_Strip currently carries an unverified
+`uart_stream` re-vendor; stacking an unverified stdio change on top would make any console
+regression ambiguous between the two. One at a time, on hardware.
 
 ---
 
@@ -1181,12 +1235,51 @@ class set to `LOG_LEVEL_DISABLED`. Worth checking specifically that the **format
 literals** of eliminated calls leave `.rodata`, which is the part that most often survives
 dead-code elimination.
 
-**Plan status summary:** 🟡 1 · 🟢 24 · 🔵 3 — 28 rows.
-(I11 closed 2026-08-12 🔵 → 🟢: both halves landed, `automation_console` and `uart_stream`.)
+### T4 — Per-module README.md, one per vendored library
+
+**Status:** 🟡 · **Needs user:** no
+
+Requested by the user 2026-08-12. Every library this effort has vendored gets its own
+`README.md`, in its own directory:
+
+| Module | README lives at | State |
+|---|---|---|
+| `logging` | `App/logging/README.md` | to write |
+| `uart_stream` | `App/uart_stream/README.md` | to write |
+| `automation_console` | `App/automation_console/README.md` | to write |
+| `menusystem` | `App/menusystem/README.md` | when the module exists (backlog 5) |
+| `nvmparams` | `App/nvmparams/README.md` | **when we turn to it** (backlog 3) |
+
+`nvmparams` is explicitly in scope even though the module does not exist yet — its README
+is written as part of that work, not retrofitted afterwards.
+
+**Scope is ADOPTION, not conventions.** The README answers "I have a new project, how do I
+drop this in": files to copy, which template to rename and edit, hooks to wire, a minimal
+call sequence, and the gotchas that cost real time. It **links** to
+`portable-apis-strategy.md` for the cross-cutting model (three tiers, dependency rule,
+optional port) rather than restating it — that doc stays the single source of truth for
+conventions, per the standing no-duplication rule.
+
+Per-module contents: file manifest marking vendored vs adopter-owned; the config-header
+knob table; the port/hook list, or an explicit "none needed"; a minimal integration
+snippet; and **measured gotchas** — e.g. `uart_stream`'s CubeIDE indexer trap and its two
+family boundaries, `automation_console`'s RX-ring vs `ACON_LINE_MAX` constraint.
+
+**Sequencing:** written AFTER a module settles. `uart_stream`'s README would have needed
+rewriting twice had it been started before its config header landed. Tracked in parallel as
+backlog item 6.
+
+---
+
+**Plan status summary:** 🟡 3 · 🟢 25 · 🔵 1 — 29 rows.
+Changes 2026-08-12: I11 closed (🔵→🟢, both halves landed); S2 resolved by the user
+(🔵→🟢, no behaviour change — `LOG_<CLASS>_COLOR` is the only source of truth for
+colour); S4 assessed and sequenced behind backlog 7a (🔵→🟡); T4 added (🟡, new row).
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.
-**Next action:** per-module README files (adoption instructions), then `menusystem`
-packaging. LED_Strip's `uart_stream` API migration needs a home in the backlog.
+**Next action:** backlog 7a — **live-test LED_Strip's `uart_stream` re-vendor on the G474**.
+It gates S4, and nothing else touching LED_Strip's console should start until it passes.
+In parallel and hardware-independent: T4 — the per-module READMEs.
 
 **End of logging-api-plan.md**
