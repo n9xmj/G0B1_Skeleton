@@ -138,15 +138,24 @@ with Skeleton's.
 |---|---|---|---|---|
 | `logging` | yes | yes | yes | byte-identical across all three |
 | `uart_stream` | yes | yes | yes* | *LED_Strip re-vendored 2026-08-12, **live test owed** (backlog 7a) |
-| `automation_console` | yes | yes | **no, by decision** | see below |
+| `automation_console` | yes | yes | **not yet, deferred** | long-term intent to migrate; blocked on the host-script cost, see below |
 | `menusystem` | not packaged | not packaged | not packaged | LED_Strip's `App/menu-api/` is the BASELINE the module gets built from (backlog 5) |
 | `stdio_retarget` | yes | yes | **no** | not yet a vendored module at all; LED_Strip uses `syscalls_vfs.c` + `__io_*`. Assessed in S4, sequenced behind 7a |
 | `nvmparams` | — | — | — | not built anywhere yet (backlog 3) |
 
-**`automation_console` in LED_Strip is a settled exception, not a gap.** The firmware port
-is easy; the wire-protocol change breaks roughly 5,100 lines of host Python across 17
-scripts, with no regression suite to make that safe. LED_Strip keeps its own ad-hoc HIL
-harness. Do not reopen this without a reason that outweighs that cost.
+**`automation_console` in LED_Strip is DEFERRED, with long-term intent to migrate**
+(user, 2026-08-12). It is not a permanent exception, and it is not an oversight either.
+
+The firmware port is ordinary work. The blocker is the host side: roughly 5,100 lines of
+Python across 17 scripts are written against the current protocol, with **no regression
+suite**, so changing the wire format invalidates all of it at once with nothing to say what
+broke. Until a regression net exists, starting the firmware would move the risk rather than
+reduce it.
+
+Plan, cost breakdown and the two candidate transition strategies live in
+`LED_Strip_Controller_G474/Docs/planning/automation-console-migration-plan.md`, and it is
+on that project's TODO checklist. Prerequisite: backlog item 7a, since
+`automation_console` talks to `uart_stream` directly.
 
 Externally sourced libraries in LED_Strip — `berry-lang`, `littlefs`, `spiflash`, `tlsf` —
 keep their upstream identity and are outside this effort's scope, per the directory-naming
