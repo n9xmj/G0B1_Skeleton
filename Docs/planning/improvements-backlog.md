@@ -180,7 +180,7 @@ integration snippet; and a "measured gotchas" section — e.g. uart_stream's Cub
 trap and its two family boundaries, automation_console's RX-ring-vs-`ACON_LINE_MAX`
 constraint.
 
-## 7. LED_Strip's uart_stream — re-vendor from the G0B1 pair
+## 7. LED_Strip's uart_stream — re-vendored 2026-08-12, LIVE TEST STILL OWED
 
 Found 2026-08-12 while closing I11; **resized the same day after actually counting.** An
 earlier draft of this item claimed "~1,600 of 1,610 lines differ, a migration with
@@ -215,5 +215,35 @@ bulk of the job.
 spins on queue-empty and then on TC with **no bound on either**, so a wedged peripheral
 hangs the main loop permanently. That alone may justify the swap.
 
-**Blocker, not a task:** there is no G474 on the bench, so this is build-verified only.
-Decide up front whether that is acceptable or whether it waits for hardware.
+**DONE 2026-08-12 — EXCEPT the live test.** Migrated: the vendored files are
+byte-identical with Skeleton's; `App/Inc/uart_stream_config.h` and
+`App/Src/uart_stream_target_g474.c` written; `USART2_IRQHandler` rewired from
+`v_uart_stream_isr_for(USART2)` to `b_uart_stream_service_uart(&huart2)`; five call sites
+updated for the bounded blocking calls. Build 0 errors / 0 warnings, text 294196, indexer
+0.13%. Map confirms the new symbols linked and the old ones gone.
+
+### 7a. LIVE TEST ON G474 HARDWARE — OPEN, BLOCKING CONFIDENCE
+
+**Nothing here has run on a board.** The G474 was unavailable on 2026-08-12. Until it runs,
+treat this migration as unverified regardless of how clean the build is.
+
+What to exercise, in order:
+
+1. **Console works at all** — boot banner over COM5 at 921600. That alone proves
+   `b_uart_stream_service_uart(&huart2)` is on the right vector and the ring is serviced.
+2. **The DMA strips still drive.** This is THE regression risk. `uart_stream_target_g474.c`
+   lists all six UARTs, and although the table is read only by the IRQn lookup for the one
+   handle being bound, that is static reasoning, not evidence. Run a strip.
+3. **`printf` under load** — the blocking TX calls are now BOUNDED where they used to spin
+   forever, so a full ring drops a byte after `UART_STREAM_TX_BLOCK_TIMEOUT_MS` (100 ms)
+   rather than hanging. Confirm no visible truncation in normal console traffic.
+4. **fs_shell binary transfer** — `v_write_byte`/`v_write_bytes` are bounded at 1000 ms and
+   DISCARD the result. A short write is newly detectable but not plumbed through, because
+   both wrappers are void and their callers have no error path. If transfers prove lossy
+   under load, plumbing that return value is the fix.
+5. **Flush timeouts** — the replaced module spun unbounded on queue-empty and TC; both are
+   now bounded and the TC wait is derived from the live baud. Nothing should visibly
+   change, which is the point.
+
+Bench: ST-Link SN `0020002E3137510939383538`, COM5 @ 921600 (`scripts/bench.defaults.json`).
+The `/roundtrip`, `/flash` and `/smoke` skills in that repo drive it.
