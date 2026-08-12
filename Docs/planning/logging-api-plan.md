@@ -666,7 +666,9 @@ build.
 
 ### S4 — stdio-retarget contract differs across the three projects
 
-**Status:** 🟡 assessed, sequenced behind 7a · **Needs user:** no
+**Status:** 🟡 assessed, sequenced behind **item 7a of
+[`improvements-backlog.md`](improvements-backlog.md)** (the owed LED_Strip live test — it is
+NOT a row on this board) · **Needs user:** no
 
 **Question:** raised by the user 2026-08-09. Skeleton and SwitchTester retarget stdio via
 `stdio_retarget.c`; LED_Strip uses `__io_putchar()` / `__io_getchar()`. Should LED_Strip be
@@ -747,8 +749,8 @@ port point, not LED_Strip give it up.
 functions removed from `app_main.c`, one docstring corrected. Regression surface is one
 boot plus an fs_shell binary transfer "+em+" far smaller than the row previously implied.
 
-**SEQUENCING, and this is the part that matters:** do NOT start until item 7a
-(`improvements-backlog.md`) is closed. LED_Strip currently carries an unverified
+**SEQUENCING, and this is the part that matters:** do NOT start until **item 7a of
+[`improvements-backlog.md`](improvements-backlog.md)** is closed. LED_Strip currently carries an unverified
 `uart_stream` re-vendor; stacking an unverified stdio change on top would make any console
 regression ambiguous between the two. One at a time, on hardware.
 
@@ -1274,11 +1276,13 @@ backlog item 6.
 **Plan status summary:** 🟡 3 · 🟢 25 · 🔵 1 — 29 rows.
 Changes 2026-08-12: I11 closed (🔵→🟢, both halves landed); S2 resolved by the user
 (🔵→🟢, no behaviour change — `LOG_<CLASS>_COLOR` is the only source of truth for
-colour); S4 assessed and sequenced behind backlog 7a (🔵→🟡); T4 added (🟡, new row).
+colour); S4 assessed and sequenced behind item 7a of `improvements-backlog.md` (🔵→🟡);
+T4 added (🟡, new row). **7a is a BACKLOG item, not a row on this board.**
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.
-**Next action:** backlog 7a — **live-test LED_Strip's `uart_stream` re-vendor on the G474**.
+**Next action:** item 7a of [`improvements-backlog.md`](improvements-backlog.md) — **live-test
+LED_Strip's `uart_stream` re-vendor on the G474**.
 It gates S4, and nothing else touching LED_Strip's console should start until it passes.
 In parallel and hardware-independent: T4 — the per-module READMEs.
 

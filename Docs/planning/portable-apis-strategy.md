@@ -129,6 +129,32 @@ either a macro in its config header (`ACON_TICK_MS()`, `ACON_PUMP()`, the `ACON_
 strings) or the `g_x_acon_command[]` table, which is the app's own command module rather
 than a copied port template. That is the optional-port rule in practice, not a gap.
 
+## Per-project adoption status — what each tree actually carries
+
+Snapshot 2026-08-12. "Adopted" means the vendored files are present and byte-identical
+with Skeleton's.
+
+| Module | Skeleton | SwitchTester | LED_Strip | Note |
+|---|---|---|---|---|
+| `logging` | yes | yes | yes | byte-identical across all three |
+| `uart_stream` | yes | yes | yes* | *LED_Strip re-vendored 2026-08-12, **live test owed** (backlog 7a) |
+| `automation_console` | yes | yes | **no, by decision** | see below |
+| `menusystem` | not packaged | not packaged | not packaged | LED_Strip's `App/menu-api/` is the BASELINE the module gets built from (backlog 5) |
+| `stdio_retarget` | yes | yes | **no** | not yet a vendored module at all; LED_Strip uses `syscalls_vfs.c` + `__io_*`. Assessed in S4, sequenced behind 7a |
+| `nvmparams` | — | — | — | not built anywhere yet (backlog 3) |
+
+**`automation_console` in LED_Strip is a settled exception, not a gap.** The firmware port
+is easy; the wire-protocol change breaks roughly 5,100 lines of host Python across 17
+scripts, with no regression suite to make that safe. LED_Strip keeps its own ad-hoc HIL
+harness. Do not reopen this without a reason that outweighs that cost.
+
+Externally sourced libraries in LED_Strip — `berry-lang`, `littlefs`, `spiflash`, `tlsf` —
+keep their upstream identity and are outside this effort's scope, per the directory-naming
+rule above.
+
+**So the genuine holdouts for LED_Strip are exactly two: `stdio_retarget` and
+`nvmparams`.**
+
 ## Sharing model (no git submodules)
 
 Submodules are deliberately avoided (clone/pull friction). `G0B1_Skeleton` is the
