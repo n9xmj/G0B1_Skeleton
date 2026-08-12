@@ -140,7 +140,7 @@ with Skeleton's.
 | `uart_stream` | yes | yes | yes* | *LED_Strip re-vendored 2026-08-12, **live test owed** (backlog 7a) |
 | `automation_console` | yes | yes | **not yet, deferred** | long-term intent to migrate; blocked on the host-script cost, see below |
 | `menusystem` | not packaged | not packaged | not packaged | LED_Strip's `App/menu-api/` is the BASELINE the module gets built from (backlog 5) |
-| `stdio_retarget` | yes | yes | **no** | not yet a vendored module at all; LED_Strip uses `syscalls_vfs.c` + `__io_*`. Assessed in S4, sequenced behind 7a |
+| `stdio_retarget` | yes | yes | **not yet, deferred** | not a vendored module anywhere yet; LED_Strip uses `syscalls_vfs.c` + `__io_*`. Assessed in S4 (`logging-api-plan.md`); LED_Strip-side plan and consumer audit in that project's `Docs/planning/stdio-retarget-migration-plan.md`. Behind 7a |
 | `nvmparams` | — | — | — | not built anywhere yet (backlog 3) |
 
 **`automation_console` in LED_Strip is DEFERRED, with long-term intent to migrate**
