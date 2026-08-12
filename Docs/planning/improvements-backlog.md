@@ -85,9 +85,65 @@ keep the board current, and do not close design questions on their behalf.
 - **How to structure the device drivers.**
 - **What parameters the pool init function must be given.**
 
-Everything else is downstream of those two.
+Everything else is downstream of those two. Two further points, added the same day, are
+settled in shape but not in detail and are written up below: **where the enums split**
+(and how the reserved ID space is partitioned), and **backward compatibility with
+existing projects**, which has a named check target.
 
 ---
+
+### Where the enums split, and the reserved-ID question (user, 2026-08-12)
+
+The user is **already clear on what gets split where**. It remains a formal decision point
+to be confirmed when the board is built, but the shape is not in doubt:
+
+| Enum | Home | Why |
+|---|---|---|
+| **Parameter IDs** (`NVM_PARAM_*`) | **adopter-modified header** | Application data. Mostly owned by the application. |
+| **Error codes** (`NVM_ERROR_*`) | **module header** | Wholly owned by the nvmparams core. |
+
+**But the parameter-ID space is not purely the application's.** The core will reserve some
+IDs for itself:
+
+- an **end-of-list sentinel**;
+- probably **write-count IDs**, to hold the per-region counters that wear levelling needs;
+- possibly others.
+
+So the real question is not "app or module" but **how the ID space is partitioned** — a
+reserved range the core owns, an application range, and whoever writes an adopter header
+needing to know where the boundary is and that it may move. Worth deciding *with* the
+init-parameter question (main decision point 2), because if IDs are adopter-owned the pool
+may need to be TOLD its ID space rather than assume it.
+
+Note the existing contiguity contract this has to survive: SwitchTester computes IDs
+arithmetically (`NVM_PARAM_CYCLE_A_REPEAT + (channel * COUNT) + parameter`) and guards the
+assumption with `_Static_assert` in `switch_out.c`. Whatever the split, arithmetic ID
+computation over an application-defined block must keep working.
+
+### Backward compatibility is a GOAL, and there is a named compatibility check
+
+**The user wants nvmparams droppable into other existing projects**, not only the three in
+this effort. Some have not been discussed in these sessions at all.
+
+**The named compatibility target is `ee_fw-ST3074-8-inch-Round-mirror-wifi-bt`** — a
+**work project**, and the STM side of the two-MCU smart-mirror product. Relevant facts
+already on hand, none of which required opening that repo:
+
+- It is an **STM32G0B0** — same family as this bench's G0B1, so the internal-flash driver
+  should transfer with little more than page-geometry differences.
+- **NVM is one of its existing concerns**, alongside LEDs, sensors, charger, state machines
+  and shadow apply/publish. So it has a working parameter store today whose usage patterns
+  are a real test of the new API.
+- Being a work project, it carries its own review and release constraints. A refactor that
+  forces sweeping call-site churn there is a much harder sell than one that does not.
+
+**Do not dig into that repo during nvmparams planning** (user, explicit). It is named here
+so that the design keeps it in view — specifically, so "how much does adopting this break
+at the call sites" stays a live question rather than being discovered late.
+
+Practical reading: the **public call API** (`x_nvm_get`, `_set`, `_create`, `_commit`, …)
+should stay recognisable even as `x_nvm_pool_init` changes shape. Init is called once per
+pool; the accessors are called everywhere. Breaking the former is cheap, the latter is not.
 
 ### Current state — measured 2026-08-12, so the new session need not re-derive it
 
