@@ -97,14 +97,19 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "main.h"               /* CubeMX indirection to the right family header:
-                                 * UART_HandleTypeDef, USART_TypeDef, IRQn_Type.
-                                 * Do NOT include a family-specific header here --
-                                 * that would tie the module to one STM32 series. */
+/* The adopter's copy of uart_stream_config_template.h, on the include path
+ * under this exact name. It names the STM32 family header this module's types
+ * and HAL calls come from, and carries every knob below. Same contract FatFs
+ * uses for ffconf.h. */
+#include "uart_stream_config.h"
 #include "queue.h"
 
 /*==============================================================================
  * Configuration
+ *
+ * Fallbacks only -- SET THESE IN uart_stream_config.h, which is included above
+ * so a value defined there always wins. Each is documented at length in
+ * uart_stream_config_template.h.
  *============================================================================*/
 
 /** @brief Maximum number of simultaneously bound UARTs. */
@@ -117,7 +122,15 @@
 #define UART_STREAM_FLUSH_DRAIN_TIMEOUT_MS  50U
 #endif
 
-/** @brief Internal bound (ms) on waiting for hardware TC once the ring drains. */
+/**
+ * @brief FLOOR (ms) on waiting for hardware TC once the ring drains.
+ *
+ * The actual bound is computed per flush from the rate in effect
+ * (12 bit-times + 2 ms; see v_uart_stream_tx_flush_timeout), so this is the
+ * minimum and the fallback used when the rate cannot be read. There is no need
+ * to raise it for slow instances -- the calculation already covers them, down
+ * to 1200 baud and below.
+ */
 #ifndef UART_STREAM_FLUSH_TC_TIMEOUT_MS
 #define UART_STREAM_FLUSH_TC_TIMEOUT_MS     2U
 #endif
@@ -416,5 +429,43 @@ bool b_uart_stream_is_tx_busy(uart_stream_h_t h_stream);
  * @return Instance pointer, or @c NULL if @p h_stream is out of range.
  */
 uart_stream_instance_t *p_x_uart_stream_get_instance(uart_stream_h_t h_stream);
+
+/**
+ * @brief Read the baud rate the hardware is ACTUALLY running.
+ *
+ * Derived from @c BRR and the peripheral's kernel clock, not from the HAL's
+ * cached @c Init.BaudRate -- that only records what was last requested, and
+ * @c BRR is an integer divisor, so the two differ. At 64 MHz a requested
+ * 921600 lands on BRR=69, i.e. 927536 (+0.64%).
+ *
+ * Handles LPUART's 256x fixed-point divisor and USART oversampling-by-8 as
+ * well as the ordinary case.
+ *
+ * @param h_stream Handle to query.
+ * @return Achieved baud rate, or 0 if @p h_stream is invalid.
+ */
+uint32_t u32_uart_stream_get_baud(uart_stream_h_t h_stream);
+
+/**
+ * @brief Set the baud rate; returns what the hardware actually achieved.
+ *
+ * @warning UNGUARDED BY DESIGN. No TX drain, no RX flush. @c BRR must not
+ *          change mid-character, so a caller that cares calls
+ *          v_uart_stream_tx_flush_timeout() first -- and should discard the RX
+ *          ring afterwards, since bytes received at the old rate are framing
+ *          garbage once the divisor moves. Doing that here would force a
+ *          policy on callers that may want an on-the-fly change.
+ *
+ * @c UE is dropped across the @c BRR write because the new divisor does not
+ * take effect while the peripheral is enabled. @c CR1's interrupt arming is
+ * preserved, so the ISR wiring is undisturbed.
+ *
+ * @param h_stream Handle to retune.
+ * @param u32_baud Requested rate.
+ * @return Achieved rate (see u32_uart_stream_get_baud), or 0 if the request
+ *         is unreachable on this instance/clock or @p h_stream is invalid --
+ *         in which case the rate is left untouched.
+ */
+uint32_t u32_uart_stream_set_baud(uart_stream_h_t h_stream, uint32_t u32_baud);
 
 #endif /* UART_STREAM_H_ */

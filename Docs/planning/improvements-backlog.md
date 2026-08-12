@@ -157,3 +157,48 @@ is exactly what drops the `ANSI.h` dependency, so take it rather than reintroduc
 **Phase 2 — wish list, not scoped.** Collapse the per-line option flags
 (`b_not_implemented`, `b_no_newline` — currently a whole `uint8_t` each) into a single
 bitfielded struct/union byte, for size, ease of use and semantic consistency.
+
+## 6. Per-module README → adoption instructions for each vendored module
+
+Requested 2026-08-12. Each vendored module gets a `README.md` in its own directory:
+`App/logging/`, `App/uart_stream/`, `App/automation_console/`, and `App/menusystem/` when
+it exists.
+
+**Scope is adoption, not conventions.** The README answers "I have a new project, how do I
+drop this in": which files to copy, which template to rename and edit, which hooks to wire,
+a minimal call sequence, and the gotchas that cost time. It **links** to
+`portable-apis-strategy.md` for the cross-cutting model (three tiers, the dependency rule,
+the optional port) rather than restating it — that doc stays the single source of truth
+for conventions, per the standing rule that they are never duplicated.
+
+Sequencing note: written AFTER the modules settle, not before. `uart_stream`'s README would
+have needed rewriting twice had it been started before the config header landed.
+
+Candidate contents, per module: file manifest with which are vendored vs adopter-owned; the
+config-header knobs table; the port/hook list (or an explicit "none needed"); minimal
+integration snippet; and a "measured gotchas" section — e.g. uart_stream's CubeIDE indexer
+trap and its two family boundaries, automation_console's RX-ring-vs-`ACON_LINE_MAX`
+constraint.
+
+## 7. LED_Strip's uart_stream — API migration, not a back-port
+
+Found 2026-08-12 while closing I11. LED_Strip carries an **older generation** of
+`uart_stream` with a genuinely different public API:
+
+| Skeleton / SwitchTester | LED_Strip |
+|---|---|
+| `b_uart_stream_service_uart(huart)` | `v_uart_stream_isr()` / `v_uart_stream_isr_for(inst)` |
+| `b_uart_stream_tx_byte_blocking()` — returns bool | `v_uart_stream_tx_byte_blocking()` — void |
+| `u16_uart_stream_tx_multi_blocking()` — returns count | `v_uart_stream_tx_multi_blocking()` — void |
+| `v_uart_stream_tx_flush_timeout()` + `v_uart_stream_tx_flush()` | `v_uart_stream_tx_flush_blocking()` |
+| target table + `g_x_uart_stream_target[]` | none |
+| ISR service counters, `p_x_uart_stream_valid()` | none |
+| baud getter/setter | none |
+
+About **1,600 of 1,610 lines differ** across the four files — `queue.{c,h}` too, which are a
+different vintage with different doc style and a `platform.h` include.
+
+So this is not the "back-port the baud work" item it was assumed to be. It is a re-vendor
+with call-site changes throughout LED_Strip, and there is **no G474 on the bench**, so it
+would be build-verified only. Sequence it on its own, and decide up front whether
+build-verification is acceptable or whether it waits for hardware.

@@ -88,11 +88,10 @@ required, no externs to satisfy. Do not invent a config header or a port source 
 module that does not need one -- an empty port is a property of a well-scoped module, not
 an omission to be filled in.
 
-**Status:** `logging` and `automation_console` satisfy this rule today.
-`uart_stream` does **not** yet — `uart_stream.h` and `queue.c` still include `main.h`,
-and there is no `uart_stream_config.h`. That is the remaining half of I11 in the logging
-plan. Treat the rule as met by two of the three vendored modules, with `logging` as its
-reference implementation.
+**Status:** all three vendored modules — `logging`, `automation_console` and
+`uart_stream` — satisfy this rule as of 2026-08-12. Each names exactly one
+application file, its own `<module>_config.h`, and nothing else. I11 in the logging plan
+is closed.
 
 ## Directory naming
 
@@ -118,13 +117,12 @@ the second is a conformance gap (I11).
 | Module | Config header | Port source | Templates in |
 |---|---|---|---|
 | `logging` | `App/Inc/logging_config.h` | `App/Src/logging_port.c` | `App/logging/*_template.*` |
-| `uart_stream` | *(none yet — uses `device_config.h`)* | `App/Src/uart_stream_target_g0b1.c` | — |
+| `uart_stream` | `App/Inc/uart_stream_config.h` | `App/Src/uart_stream_target_g0b1.c` | `App/uart_stream/*_template.h` |
 | `automation_console` | `App/Inc/automation_console_config.h` | `App/automation_console/automation_commands.c` | `App/automation_console/*_template.h` |
 | `menusystem` | *(none needed)* | *(none needed)* | — |
 
-The one remaining "none yet" cell is what the rest of I11 fixes: `uart_stream` should
-gain a `uart_stream_config.h` rather than reaching into the application's aggregator, as
-`automation_console` did on 2026-08-12.
+No "none yet" cells remain. `menusystem`'s "none needed" is the optional-port rule doing
+its job, not a gap.
 
 `automation_console` has **no port source**. Everything it needs from the application is
 either a macro in its config header (`ACON_TICK_MS()`, `ACON_PUMP()`, the `ACON_ID_*`
@@ -143,7 +141,31 @@ their happenstance landing site; Skeleton is the intended home.)
 
 ## uart_stream conventions
 
-Established during the 2026-08-08 migration.
+Established during the 2026-08-08 migration; config header added 2026-08-12.
+
+- **Config header:** `uart_stream_config_template.h` ships beside the module; copy to
+  `App/Inc/uart_stream_config.h` and edit. `uart_stream.h` and `queue.c` include that name
+  and nothing else from the application — the `main.h` they used to carry is gone.
+  It holds `UART_STREAM_MAX_INSTANCES`, the two flush timeouts, the blocking-write
+  deadline, and **the family header** (below).
+- **The family header is the adopter's line to edit.** The module is HAL-based, so it
+  needs ST's header for the series it builds against; the config header is the only place
+  that name appears. Note this is the FIRST of two family boundaries — the second is the
+  clock-mux selector list in `u32_uart_stream_kernel_clock()`.
+- **CubeIDE indexer trap, measured 2026-08-12.** Writing `#include "stm32g0xx_hal.h"` in
+  a config header under `App/Inc` takes CDT from 3 unresolved inclusions / 0.13%
+  unresolved names to 21 / 2.1% — a Problems view full of phantoms against an image that
+  compiles byte-identical. A `USE_HAL_DRIVER` guard does not help, because a real
+  translation unit defines it. **Both G0B1 projects therefore write `#include "main.h"`**,
+  which contains only that same include and which CDT has already resolved in `main.c`'s
+  context. Costs nothing: the vendored files name only `uart_stream_config.h` either way.
+  The *template* keeps the family header, guarded on `USE_HAL_DRIVER` — it is an orphan
+  header, and unguarded it poisons the index by itself.
+- **Baud getter/setter** `u32_uart_stream_get_baud` / `u32_uart_stream_set_baud` read and
+  write `BRR` directly rather than trusting the HAL's cached `Init.BaudRate`, handling
+  LPUART's 256x fixed point and USART `OVER8`. The setter is **unguarded by design** and
+  returns the rate actually achieved. The flush's TC wait is derived from that rate, so
+  `UART_STREAM_FLUSH_TC_TIMEOUT_MS` is a floor rather than the bound.
 
 - **Module bundle:** `App/uart_stream/{uart_stream.c,uart_stream.h,queue.c,queue.h}` —
   family-neutral **except** the register-surface port boundary in `v_uart_stream_service`, which

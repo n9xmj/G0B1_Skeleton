@@ -76,7 +76,7 @@ refactor (I8), and a deferred runtime-level idea (D4/W1).
 | **I8** | 🟡 | NVM auto-commit delay defined twice — keep `device_config.h`'s, drop `platform.h`'s |
 | **I9** | 🟢 | `PRINTF_ATTR` now defined once, in `logging.h` |
 | **I10** | 🟢 | Call-site sweep — none needed; D1 leaves every existing call site unchanged |
-| **I11** | 🟡 | Existing vendored modules violate the dependency rule — `automation_console` fixed 2026-08-12; `uart_stream` still open |
+| **I11** | 🟢 | Existing vendored modules violate the dependency rule — both fixed 2026-08-12 |
 | **I12** | 🟢 | `ANSI_FG_RGB` / `ANSI_BG_RGB` missing trailing `m` — fixed |
 | **I13** | 🟢 | `DPRINTF_TS` called a nonexistent function; never used, so never caught |
 | **I14** | 🟢 | `DPRINTF`/`DPRINTF_TS` always compile too, via `LOG_IN_DEBUG_BUILD` |
@@ -945,9 +945,23 @@ behaviour unchanged. Phases 1 and 2 touch no application source at all.
 with 0 warnings; SwitchTester HIL 48/48 plus a 13-field baud sweep, Skeleton smoke-tested
 on COM3.
 
-**Still open — `uart_stream`.** `uart_stream.h` and `queue.c` include `main.h`, and there
-is no `uart_stream_config.h`. Travels with the baud getter/setter back-port, since both
-edit the same files in all three projects.
+**Done 2026-08-12 — `uart_stream`.** `uart_stream.h` and `queue.c` now include
+`uart_stream_config.h` and nothing else from the app; the `main.h` they carried is gone.
+The config header owns the instance count, both flush timeouts, the blocking-write
+deadline, and the family header — the module's first of two family boundaries, the other
+being the clock-mux list in `u32_uart_stream_kernel_clock()`.
+
+Shipped in the same pass: the baud getter/setter and the rate-derived flush timeout were
+back-ported from SwitchTester, so `uart_stream.{c,h}` and `queue.{c,h}` are byte-identical
+across both G0B1 projects again. Costs Skeleton zero flash — nothing calls the new
+functions there and `--gc-sections` drops them (text 32920, unchanged).
+
+**LED_Strip is NOT part of this.** Its `uart_stream` is an older generation with a
+different API — `v_uart_stream_isr()` / `v_uart_stream_isr_for()` rather than
+`b_uart_stream_service_uart()`, void-returning blocking calls, `v_uart_stream_tx_flush_blocking()`
+instead of the timeout pair, no target table, no ISR counters. Roughly 1,600 of 1,610
+lines differ. That is an API migration with call-site changes and no G474 on the bench,
+not a back-port; it wants its own tracked item.
 
 **Question:** the include map shows the convention is not actually enforced today:
 
@@ -1167,12 +1181,12 @@ class set to `LOG_LEVEL_DISABLED`. Worth checking specifically that the **format
 literals** of eliminated calls leave `.rodata`, which is the part that most often survives
 dead-code elimination.
 
-**Plan status summary:** 🟡 2 · 🟢 23 · 🔵 3 — 28 rows.
-(I11 moved 🔵 → 🟡 on 2026-08-12: half of it landed, `automation_console` side.)
+**Plan status summary:** 🟡 1 · 🟢 24 · 🔵 3 — 28 rows.
+(I11 closed 2026-08-12 🔵 → 🟢: both halves landed, `automation_console` and `uart_stream`.)
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.
-**Next action:** finish I11's remaining half — `uart_stream_config.h` and the `main.h`
-removal — together with the baud getter/setter back-port to Skeleton and LED_Strip.
+**Next action:** per-module README files (adoption instructions), then `menusystem`
+packaging. LED_Strip's `uart_stream` API migration needs a home in the backlog.
 
 **End of logging-api-plan.md**
