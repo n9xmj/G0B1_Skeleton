@@ -69,13 +69,10 @@
 // Automation console (App/automation_console)
 //------------------------------------------------------------------------------
 //
-// Build switch for the machine-facing command console. 1 compiles it in: the
-// debug-menu 'a' entry, the 0xDA SCRIPT-mode sentinel, and the @/$ example
-// commands. 0 compiles it out entirely -- the module bodies drop to nothing and
-// the entry points become inert inline stubs, so no call site needs an #ifdef.
-// See App/automation_console/automation_console.h.
-
-#define DEV_CONFIG_ENABLE_AUTOMATION_CONSOLE                                   1
+// Nothing here. The console is a vendored module and owns its own settings
+// file: see App/Inc/automation_console_config.h, copied from the template in
+// App/automation_console/. That is where the build switch, the buffer sizes and
+// the timeouts live.
 
 //------------------------------------------------------------------------------
 // Misc

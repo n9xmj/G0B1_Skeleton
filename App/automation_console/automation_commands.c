@@ -11,11 +11,13 @@
  * for the command-author API.
  *
  * The whole file is gated by ACON_ENABLED so it compiles out when a project sets
- * DEV_CONFIG_ENABLE_AUTOMATION_CONSOLE to 0.
+ * ACON_ENABLE to 0 in automation_console_config.h.
  ******************************************************************************/
 
-#include "device_config.h"          /* stdint/stdio, ACON_* */
-#include "automation_console.h"
+#include <stdint.h>
+#include <stdio.h>
+
+#include "automation_console.h"      /* pulls automation_console_config.h */
 
 #if ACON_ENABLED
 

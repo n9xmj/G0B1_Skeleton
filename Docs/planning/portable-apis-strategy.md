@@ -88,11 +88,11 @@ required, no externs to satisfy. Do not invent a config header or a port source 
 module that does not need one -- an empty port is a property of a well-scoped module, not
 an omission to be filled in.
 
-**Status:** `logging` satisfies this rule today. `uart_stream` and `automation_console`
-do **not** yet — `automation_console.{c,h}` include `device_config.h`, and
-`uart_stream.h` and `queue.c` include `main.h`. The retrofit is deferred until it blocks
-progress (I11 in the logging plan). Treat the rule as the **target** convention with
-logging as its reference implementation, not as something the whole tree already meets.
+**Status:** `logging` and `automation_console` satisfy this rule today.
+`uart_stream` does **not** yet — `uart_stream.h` and `queue.c` still include `main.h`,
+and there is no `uart_stream_config.h`. That is the remaining half of I11 in the logging
+plan. Treat the rule as met by two of the three vendored modules, with `logging` as its
+reference implementation.
 
 ## Directory naming
 
@@ -119,12 +119,17 @@ the second is a conformance gap (I11).
 |---|---|---|---|
 | `logging` | `App/Inc/logging_config.h` | `App/Src/logging_port.c` | `App/logging/*_template.*` |
 | `uart_stream` | *(none yet — uses `device_config.h`)* | `App/Src/uart_stream_target_g0b1.c` | — |
-| `automation_console` | *(none yet — uses `device_config.h`)* | `App/automation_console/automation_commands.c` | — |
+| `automation_console` | `App/Inc/automation_console_config.h` | `App/automation_console/automation_commands.c` | `App/automation_console/*_template.h` |
 | `menusystem` | *(none needed)* | *(none needed)* | — |
 
-The "none yet" cells are exactly what I11 would fix: those two modules should gain
-`uart_stream_config.h` and `automation_console_config.h` rather than reaching into the
-application's aggregator.
+The one remaining "none yet" cell is what the rest of I11 fixes: `uart_stream` should
+gain a `uart_stream_config.h` rather than reaching into the application's aggregator, as
+`automation_console` did on 2026-08-12.
+
+`automation_console` has **no port source**. Everything it needs from the application is
+either a macro in its config header (`ACON_TICK_MS()`, `ACON_PUMP()`, the `ACON_ID_*`
+strings) or the `g_x_acon_command[]` table, which is the app's own command module rather
+than a copied port template. That is the optional-port rule in practice, not a gap.
 
 ## Sharing model (no git submodules)
 
@@ -176,16 +181,39 @@ Vendored 2026-08-08. `App/automation_console/`, split into:
 - `automation_commands.c` — **per-app** handlers plus `g_x_acon_command[]`, the table the
   core dispatches into (the port point, mirroring uart_stream's target table). The core owns the
   builtins, so a command module carries only its domain ops.
+- `automation_console_config_template.h` — copy to `App/Inc/automation_console_config.h`
+  and edit. Added 2026-08-12; the core includes that name and nothing else from the app.
 
 Handlers own their parsing: they receive the raw line and either call `u8_acon_args()`
 (parsed comma fields) or read the line directly (raw text). Skeleton's whole command set
 is the two example commands that show both idioms: `@` (parsed-args CSV echo) and `$`
 (raw-text echo).
 
-Build-gated by **`DEV_CONFIG_ENABLE_AUTOMATION_CONSOLE`** (`device_config.h`): 1 compiles
-it in, 0 compiles it out to inert inline stubs (~3.7 KB flash / 1.2 KB RAM). Requires the
-`PUMP_POLLING_TASK` macro in `platform.h`. Bench-verified both repos (SwitchTester HIL
-47/47; Skeleton SCRIPT + human echo on COM3).
+Build-gated by **`ACON_ENABLE`** (`automation_console_config.h`): 1 compiles it in, 0
+compiles it out to inert inline stubs (~3.7 KB flash / 1.2 KB RAM). Renamed from
+`DEV_CONFIG_ENABLE_AUTOMATION_CONSOLE` on 2026-08-12, when the module took ownership of
+its own settings.
+
+Everything the core needs from the application is now a macro in that config header:
+
+| Knob | What it is |
+|---|---|
+| `ACON_ENABLE` | build switch |
+| `ACON_TICK_MS()` | free-running millisecond counter (`SYSTEM_TICK()` here) |
+| `ACON_PUMP()` | cooperative polling hook (`PUMP_POLLING_TASK()` here) |
+| `ACON_ID_PRODUCT` / `_PLATFORM` / `_FIRMWARE` / `_BUILD` | strings the `V` builtin reports |
+| `ACON_MAX_ARGS` | widest comma-split `u8_acon_args()` will do |
+| `ACON_LINE_MAX` / `ACON_EMIT_MAX` | the module's two static buffers |
+| `ACON_IDLE_TIMEOUT_MS` / `ACON_TX_TIMEOUT_MS` | timeouts |
+
+Omitting `ACON_TICK_MS()` or `ACON_PUMP()` is legal and each carries a `#warning` naming
+the consequence — a wedged session, or a board that appears to hang. Omitting an
+`ACON_ID_*` reports `?` for that field. So the module builds standalone, but never
+silently loses a behaviour.
+
+SwitchTester sets `ACON_MAX_ARGS` to 14 for the baud sweep's host-supplied rate list; it
+was a `-D` in `.cproject` until the config header existed. Bench-verified both repos
+(SwitchTester HIL 48/48 plus a 13-field sweep; Skeleton `V`/`Z`/`@`/`L` on COM3).
 
 ## stdout mute — a stdio capability, not a console one
 

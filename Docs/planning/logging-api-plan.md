@@ -76,7 +76,7 @@ refactor (I8), and a deferred runtime-level idea (D4/W1).
 | **I8** | 🟡 | NVM auto-commit delay defined twice — keep `device_config.h`'s, drop `platform.h`'s |
 | **I9** | 🟢 | `PRINTF_ATTR` now defined once, in `logging.h` |
 | **I10** | 🟢 | Call-site sweep — none needed; D1 leaves every existing call site unchanged |
-| **I11** | 🔵 | Existing vendored modules violate the dependency rule — deferred until it blocks |
+| **I11** | 🟡 | Existing vendored modules violate the dependency rule — `automation_console` fixed 2026-08-12; `uart_stream` still open |
 | **I12** | 🟢 | `ANSI_FG_RGB` / `ANSI_BG_RGB` missing trailing `m` — fixed |
 | **I13** | 🟢 | `DPRINTF_TS` called a nonexistent function; never used, so never caught |
 | **I14** | 🟢 | `DPRINTF`/`DPRINTF_TS` always compile too, via `LOG_IN_DEBUG_BUILD` |
@@ -933,7 +933,21 @@ behaviour unchanged. Phases 1 and 2 touch no application source at all.
 
 ### I11 — Existing vendored modules already violate the dependency rule
 
-**Status:** 🟡 · **Needs user:** yes (scope call)
+**Status:** 🟡 · **Needs user:** no — half done
+
+**Done 2026-08-12 — `automation_console`.** It now includes
+`automation_console_config.h` and nothing else from the app: no `device_config.h`, no
+`main.h`, no `platform.h`. The template lives beside the module as
+`automation_console_config_template.h`, and the two platform hooks it needs are macros
+(`ACON_TICK_MS()`, `ACON_PUMP()`) rather than externs, so there is still no port source.
+`DEV_CONFIG_ENABLE_AUTOMATION_CONSOLE` became `ACON_ENABLE`, and SwitchTester's
+`-DACON_MAX_ARGS=14` moved out of `.cproject` into the config header. Both projects build
+with 0 warnings; SwitchTester HIL 48/48 plus a 13-field baud sweep, Skeleton smoke-tested
+on COM3.
+
+**Still open — `uart_stream`.** `uart_stream.h` and `queue.c` include `main.h`, and there
+is no `uart_stream_config.h`. Travels with the baud getter/setter back-port, since both
+edit the same files in all three projects.
 
 **Question:** the include map shows the convention is not actually enforced today:
 
@@ -1153,10 +1167,12 @@ class set to `LOG_LEVEL_DISABLED`. Worth checking specifically that the **format
 literals** of eliminated calls leave `.rodata`, which is the part that most often survives
 dead-code elimination.
 
-**Plan status summary:** 🟡 1 · 🟢 23 · 🔵 4 — 28 rows.
+**Plan status summary:** 🟡 2 · 🟢 23 · 🔵 3 — 28 rows.
+(I11 moved 🔵 → 🟡 on 2026-08-12: half of it landed, `automation_console` side.)
 **No open questions remain on the board.** Every 🟡 is either implementation detail to be
 carried out (I1, I4–I9), a follow-on scope call (I11), or documentation (T1–T3); S1 is a
 recommendation with no dissent. Both phases are fully specified.
-**Next action:** LED_Strip migration (build-verified only — no G474 target on the bench), then T1-T3 docs.
+**Next action:** finish I11's remaining half — `uart_stream_config.h` and the `main.h`
+removal — together with the baud getter/setter back-port to Skeleton and LED_Strip.
 
 **End of logging-api-plan.md**
