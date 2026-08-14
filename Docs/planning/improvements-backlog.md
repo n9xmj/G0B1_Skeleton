@@ -243,6 +243,42 @@ echo to stderr and asserts nothing yet.
 
 ## 5. menusystem → vendored module (packaging)
 
+**STATUS 2026-08-13 — packaging DONE (organization); the code baseline went the OTHER way
+from the plan below; full reconciliation DEFERRED.** All three projects now carry the
+module at `App/menusystem/menusystem.{c,h}` (directories unified, `.cproject` include paths
+added, all three build 0/0). But this plan called for **LED_Strip's** copy to be the code
+baseline, and it was not:
+- **SwitchTester + Skeleton** carry a canonical built from *SwitchTester's* older
+  `item_type`/`key` naming, with Mirror's `no_newline` + `const` merged, `ANSI.h` dropped,
+  and hide-on-NULL returns added. Byte-identical to each other. (Still uses the wrong
+  `#ifndef DEBUG_H` include guard — carried forward, not fixed.)
+- **LED_Strip** was only *relocated* (`menu-api/`→`menusystem/`, files renamed, includes +
+  `.cproject` fixed); its code is untouched — still the fuller `x_type`/`c_key`/`pfn_`/
+  `p_x_` fork this plan intended as the baseline.
+
+"Consistency in organization, divergence in code" (user, 2026-08-13). **Open decision:**
+which member-naming is THE canonical. Adopting LED_Strip's fuller Hungarian (as this plan
+intended) means renaming SwitchTester+Skeleton (~130 refs) and redoing this session's
+committed work; keeping `item_type`/`key` means renaming LED_Strip's **263** refs. Its own
+focused pass — do not blind-sweep it.
+
+**Reconciliation plan (deferred; direction set by user 2026-08-13).** Do it the CHEAP
+direction: **LED_Strip's menusystem is the baseline** — its `x_type`/`c_key`/`pfn_`/`p_x_`
+naming becomes THE canonical. Then:
+1. Migrate into LED_Strip's copy the behaviour changes made to SwitchTester's this session:
+   the hide-on-NULL-text return, the `[At top-level menu]` empty-stack message, and the
+   adoption README (with its edits). Fold in Phase 2 here too — collapse the option-flag
+   bytes (`b_not_implemented`, `b_no_newline`) into one bitfielded union byte ("bitmap fields").
+2. Copy that reconciled module back to SwitchTester and Skeleton (byte-identical).
+3. Edit SwitchTester's + Skeleton's menu DEFINITIONS to the canonical member names
+   (`item_type`→`x_type`, `key`→`c_key`, `text`→`p_c_text`, `function`→`pfn_function`,
+   `menu`→`p_x_menu`, …) — ~130 designated-initialiser refs (SwitchTester 101, Skeleton 29).
+   Every miss is a hard compile error, so it is mechanical.
+
+Rationale (user): far fewer LOC than the other direction (renaming LED_Strip's **263** refs
+across its 2283-line `debug_menu.c`), since SwitchTester + Skeleton have only a handful of
+menu defs. Also retires the `#ifndef DEBUG_H` guard wart (LED_Strip uses `#pragma once`).
+
 **Phase 1 — packaging only, no behaviour change.** The code is already portable: zero
 application dependencies in either copy (C library plus its own header; Skeleton's also
 pulls `ANSI.h`). What is missing is packaging, following the logging model.

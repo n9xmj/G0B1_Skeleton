@@ -9,11 +9,12 @@
 These subsystems are being (re)designed as **portable, drop-in APIs**, each in its own
 subdirectory, to be reused across STM32 projects:
 
-- **menusystem** — **NOT vendored yet; packaging only.** Earlier versions of this doc said
-  "DONE, lives portable in LED_Strip" — that was wrong and is corrected here. The *code* is
-  effectively portable already (zero application dependencies), but it is not a module in
-  any project: `App/Src/menusystem.c` in Skeleton and SwitchTester, `App/menu-api/menu-api.c`
-  in LED_Strip. See backlog item 5 for the packaging plan.
+- **menusystem** — **packaged 2026-08-13 (organization); code reconciliation pending.** Now
+  a vendored `App/menusystem/` directory in all three projects (all build 0/0). NOT yet
+  byte-identical: SwitchTester + Skeleton carry the canonical (`item_type`/`key` naming,
+  Mirror's `no_newline` + const, ANSI dropped, hide-on-NULL returns); LED_Strip was
+  relocated but keeps its fuller `x_type`/`c_key` fork. Which member-naming is canonical is
+  an open decision — see backlog item 5.
 - **uart_stream** — DONE 2026-08-08. Migrated into `G0B1_Skeleton`, bench-verified.
 - **automation_console** — DONE 2026-08-08 (see below).
 - **logging** — DONE 2026-08-09. Vendored as `App/logging/` with compile-time verbosity
@@ -103,6 +104,7 @@ underscores included, no `-api` suffix:
 | `logging.c` | `App/logging/` |
 | `uart_stream.c` | `App/uart_stream/` |
 | `automation_console.c` | `App/automation_console/` |
+| `menusystem.c` | `App/menusystem/` |
 
 The same names are used in **all three projects**. Externally sourced libraries are the
 exception: `littlefs`, `tlsf`, `berry-lang` and the like keep their upstream identity,
@@ -139,7 +141,7 @@ with Skeleton's.
 | `logging` | yes | yes | yes | byte-identical across all three |
 | `uart_stream` | yes | yes | yes* | *LED_Strip re-vendored 2026-08-12, **live test owed** (backlog 7a) |
 | `automation_console` | yes | yes | **not yet, deferred** | long-term intent to migrate; blocked on the host-script cost, see below |
-| `menusystem` | not packaged | not packaged | not packaged | LED_Strip's `App/menu-api/` is the BASELINE the module gets built from (backlog 5) |
+| `menusystem` | yes | yes | organized* | `App/menusystem/` in all three (2026-08-13); SwitchTester+Skeleton byte-identical canonical (`item_type`/`key`). *LED_Strip relocated but code is its diverged `x_type`/`c_key` fork — naming reconciliation pending (backlog 5) |
 | `stdio_retarget` | yes | yes | **not yet, deferred** | not a vendored module anywhere yet; LED_Strip uses `syscalls_vfs.c` + `__io_*`. Assessed in S4 (`logging-api-plan.md`); LED_Strip-side plan and consumer audit in that project's `Docs/planning/stdio-retarget-migration-plan.md`. Behind 7a |
 | `nvmparams` | — | — | — | not built anywhere yet (backlog 3) |
 

@@ -167,11 +167,6 @@ static void v_debug_quick_test_2(void)
     printf("Quick test function 2 (stub)\r\n");
 }
 
-static void v_debug_at_main_menu(void)
-{
-    printf("(at main menu level)\r\n");
-}
-
 #if ACON_ENABLED
 /*
  * Human-driven entry to the automation console. The machine (SCRIPT-mode) entry
@@ -234,10 +229,12 @@ static const menu_item_t x_debug_top_menu[] =
     },
 #endif
     {
-        .item_type = MENU_ITEM_FUNCTION,
+        /* Hidden: ESC at the top level has nowhere to pop. menusystem replies
+         * "[At top-level menu]" on an empty-stack return, so a spammed ESC
+         * confirms you are fully backed out -- no custom function needed. */
+        .item_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
         .key = '\x1B',
-        .text = NULL,
-        .function = v_debug_at_main_menu
+        .text = NULL
     },
     {
         .item_type = MENU_ITEM_END_OF_LIST,
