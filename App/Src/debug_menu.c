@@ -19,6 +19,9 @@
 #include "rtc.h"                     /* hrtc, for post-STOP HAL_RTC_WaitForSynchro */
 #include "automation_console.h"      /* host/script command interface (optional) */
 
+#include <stdlib.h>                  /* strtoul -- KEY_LIST demo value entry (removable) */
+#include <errno.h>                   /* ERANGE  -- KEY_LIST demo value entry (removable) */
+
 /*============================================================================
  * PRIVATE PROTOTYPES
  *==========================================================================*/
@@ -184,60 +187,164 @@ static void v_debug_automation_console(void)
  * MENU DEFINITION
  *==========================================================================*/
 
+/* ---------------------------------------------------------------------------
+ * DEMO: menusystem KEY_LIST_FUNCTION + HELP_TEXT_VARIABLE worked example
+ * (documented in App/menusystem/README.md). Presented as a self-contained
+ * submenu reached from the main menu, so it lifts out cleanly when this skeleton
+ * is cloned for a real project: delete this block, the x_keylist_demo_menu array
+ * below, the one CALL_MENU entry in x_debug_top_menu that points at it, and the
+ * two standard includes above (harmless if left).
+ * ------------------------------------------------------------------------- */
+static uint32_t u32_test_values[4];
+
+/* HELP_TEXT_VARIABLE emitter: redraws the live values (and their keys) on every
+ * menu print, giving the KEY_LIST entry -- which prints nothing itself -- a
+ * legend and a readout in one. */
+static void v_test_values_help(void)
+{
+    uint8_t u8_i;
+
+    for (u8_i = 0; u8_i < 4; u8_i++)
+    {
+        printf("[%c] Edit test value %u = %lu\r\n",
+               "1234"[u8_i], (unsigned) (u8_i + 1),
+               (unsigned long) u32_test_values[u8_i]);
+    }
+}
+
+/* KEY_LIST_FUNCTION handler: keys '1'..'4' all land here. The framework passes
+ * the matched key's index in the "1234" list, so u8_index is already the array
+ * index -- no lookup needed.
+ *
+ * Numeric-entry convention (reader is i_getline() in utils.c): a blank line or
+ * ESC leaves the setting unchanged; strtoul base 0 accepts decimal, 0x-hex and
+ * 0-octal; anything non-numeric, with trailing junk, or out of range prints
+ * "Invalid value" and re-prompts. (Ctrl-X line-clear is handled inside
+ * i_getline, so the caller never sees it.) */
+static void v_edit_test_value(char c_key, uint8_t u8_index)
+{
+    char str_line[16];
+
+    (void) c_key;
+
+    for (;;)
+    {
+        char *pc_end;
+        unsigned long ul_val;
+
+        printf("Test value %u [now %lu]: ",
+               (unsigned) (u8_index + 1), (unsigned long) u32_test_values[u8_index]);
+
+        if (i_getline(str_line, (uint16_t) (sizeof(str_line) - 1u)) <= 0)
+        {
+            return;                     /* ESC (-1) or blank line (0): unchanged */
+        }
+
+        errno = 0;
+        ul_val = strtoul(str_line, &pc_end, 0);     /* 0x.. hex, 0.. octal, else decimal */
+        if ((*pc_end == '\0') && (errno == 0))      /* whole line parsed, no overflow */
+        {
+            u32_test_values[u8_index] = (uint32_t) ul_val;
+            return;                     /* accepted */
+        }
+
+        printf("Invalid value\r\n");    /* re-prompt */
+    }
+}
+
+static const menu_item_t x_keylist_demo_menu[] =
+{
+    {   /* live values -- redrawn on every print; doubles as the KEY_LIST legend */
+        .x_type                 = MENU_ITEM_HELP_TEXT_VARIABLE,
+        .c_key                  = 0,
+        .p_c_text               = "\r\n--- KEY_LIST_FUNCTION demo ---\r\n",
+        .pfn_help_text_function = v_test_values_help
+    },
+    {
+        .x_type = MENU_ITEM_HELP,
+        .c_key = '?',
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_HELP_HIDDEN,
+        .c_key = '\r',
+        .p_c_text = NULL
+    },
+    {   /* keys '1'..'4' -> one handler, indexed by list position */
+        .x_type                = MENU_ITEM_KEY_LIST_FUNCTION,
+        .p_c_key_list          = "1234",
+        .pfn_key_list_function = v_edit_test_value
+    },
+    {
+        .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
+        .c_key = '\x1B',
+        .p_c_text = "Return to previous menu"
+    },
+    {
+        .x_type = MENU_ITEM_END_OF_LIST,
+    }
+};
+
 static const menu_item_t x_debug_top_menu[] =
 {
     {
-        .item_type = MENU_ITEM_HELP_TEXT_FIXED,
-        .key = 0,
-        .text = "\r\n--- " PRODUCT_NAME " v" FIRMWARE_VERSION " Main Menu ---\r\n"
+        .x_type = MENU_ITEM_HELP_TEXT_FIXED,
+        .c_key = 0,
+        .p_c_text = "\r\n--- " PRODUCT_NAME " v" FIRMWARE_VERSION " Main Menu ---\r\n"
     },
     {
-        .item_type = MENU_ITEM_HELP,
-        .key = '?',
-        .text = NULL
+        .x_type = MENU_ITEM_HELP,
+        .c_key = '?',
+        .p_c_text = NULL
     },
     {
         /* Bare <Enter> re-prints the menu without logging an unknown key. */
-        .item_type = MENU_ITEM_HELP_HIDDEN,
-        .key = '\r',
-        .text = NULL
+        .x_type = MENU_ITEM_HELP_HIDDEN,
+        .c_key = '\r',
+        .p_c_text = NULL
     },
     {
-        .item_type = MENU_ITEM_FUNCTION,
-        .key = 'W',
-        .text = "RTC wake-up timer sleep test",
-        .function = v_debug_wakeup_sleep_test
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'W',
+        .p_c_text = "RTC wake-up timer sleep test",
+        .pfn_function = v_debug_wakeup_sleep_test
     },
     {
-        .item_type = MENU_ITEM_FUNCTION,
-        .key = 'q',
-        .text = "Quick test function 1",
-        .function = v_debug_quick_test_1
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'q',
+        .p_c_text = "Quick test function 1",
+        .pfn_function = v_debug_quick_test_1
     },
     {
-        .item_type = MENU_ITEM_FUNCTION,
-        .key = 'Q',
-        .text = "Quick test function 2",
-        .function = v_debug_quick_test_2
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'Q',
+        .p_c_text = "Quick test function 2",
+        .pfn_function = v_debug_quick_test_2
     },
 #if ACON_ENABLED
     {
-        .item_type = MENU_ITEM_FUNCTION,
-        .key = 'a',
-        .text = "Automation console (human-driven)",
-        .function = v_debug_automation_console
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'a',
+        .p_c_text = "Automation console (human-driven)",
+        .pfn_function = v_debug_automation_console
     },
 #endif
+    {   /* DEMO: self-contained menusystem example -- see block above / README */
+        .x_type   = MENU_ITEM_CALL_MENU,
+        .c_key    = 'k',
+        .p_c_text = "menusystem KEY_LIST demo",
+        .p_x_menu = x_keylist_demo_menu
+    },
     {
         /* Hidden: ESC at the top level has nowhere to pop. menusystem replies
          * "[At top-level menu]" on an empty-stack return, so a spammed ESC
          * confirms you are fully backed out -- no custom function needed. */
-        .item_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
-        .key = '\x1B',
-        .text = NULL
+        .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
+        .c_key = '\x1B',
+        .p_c_text = NULL
     },
     {
-        .item_type = MENU_ITEM_END_OF_LIST,
+        .x_type = MENU_ITEM_END_OF_LIST,
     }
 };
 
@@ -262,7 +369,7 @@ void v_debug_menu_init(void)
 
 static void v_debug_menu_exec(char c_key)
 {
-    if (x_debug_menu_control.menu_stack == NULL)
+    if (x_debug_menu_control.pap_x_menu == NULL)
     {
         v_debug_menu_init();
     }
@@ -302,7 +409,7 @@ void v_debug_menu_service(void)
         }
 #endif
 
-        p_c_char_to_str((char) i_key, str_key);
+        pc_char_to_str((char) i_key, str_key);
         printf("Cmd [%s]\r\n", str_key);
         v_debug_menu_exec((char) i_key);
     }

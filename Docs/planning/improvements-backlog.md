@@ -243,6 +243,15 @@ echo to stderr and asserts nothing yet.
 
 ## 5. menusystem → vendored module (packaging)
 
+**STATUS 2026-08-14 — ✅ FULLY RECONCILED.** LED_Strip's `x_type`/`c_key`/`pfn_`/`p_x_`
+naming is now THE canonical across all three projects. The canonical was built in LED_Strip
+(the four SwitchTester-side behaviours merged in — hide-on-NULL return, `[At top-level menu]`
+empty-stack message, the adoption README, and the Phase-2 option-flag bitfield union — plus
+`uart_stream`-style Doxygen and the `MENU_API_PROMPT`→`MENUSYSTEM_PROMPT` macro rename), then
+copied byte-identical to SwitchTester + Skeleton, and each project's menu **definitions**
+renamed to the canonical members. The `#ifndef DEBUG_H` guard wart is retired (`#pragma once`
+now). All three build 0/0; SwitchTester was bench-verified on hardware. History below.
+
 **STATUS 2026-08-13 — packaging DONE (organization); the code baseline went the OTHER way
 from the plan below; full reconciliation DEFERRED.** All three projects now carry the
 module at `App/menusystem/menusystem.{c,h}` (directories unified, `.cproject` include paths
@@ -262,9 +271,11 @@ intended) means renaming SwitchTester+Skeleton (~130 refs) and redoing this sess
 committed work; keeping `item_type`/`key` means renaming LED_Strip's **263** refs. Its own
 focused pass — do not blind-sweep it.
 
-**Reconciliation plan (deferred; direction set by user 2026-08-13).** Do it the CHEAP
-direction: **LED_Strip's menusystem is the baseline** — its `x_type`/`c_key`/`pfn_`/`p_x_`
-naming becomes THE canonical. Then:
+**Reconciliation plan (✅ COMPLETED 2026-08-14; direction set by user 2026-08-13).** Done the
+CHEAP direction: **LED_Strip's menusystem was the baseline** — its `x_type`/`c_key`/`pfn_`/
+`p_x_` naming became THE canonical. Executed exactly as below (menu-def rename touched
+SwitchTester's `debug_menu.c` ~113 initialiser tokens and Skeleton's ~30, all via a
+word-boundary regex sweep so `.key`/`.menu` could not clobber `.key_list`/`.menu_stack`):
 1. Migrate into LED_Strip's copy the behaviour changes made to SwitchTester's this session:
    the hide-on-NULL-text return, the `[At top-level menu]` empty-stack message, and the
    adoption README (with its edits). Fold in Phase 2 here too — collapse the option-flag

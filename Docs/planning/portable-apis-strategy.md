@@ -9,12 +9,11 @@
 These subsystems are being (re)designed as **portable, drop-in APIs**, each in its own
 subdirectory, to be reused across STM32 projects:
 
-- **menusystem** — **packaged 2026-08-13 (organization); code reconciliation pending.** Now
-  a vendored `App/menusystem/` directory in all three projects (all build 0/0). NOT yet
-  byte-identical: SwitchTester + Skeleton carry the canonical (`item_type`/`key` naming,
-  Mirror's `no_newline` + const, ANSI dropped, hide-on-NULL returns); LED_Strip was
-  relocated but keeps its fuller `x_type`/`c_key` fork. Which member-naming is canonical is
-  an open decision — see backlog item 5.
+- **menusystem** — DONE 2026-08-14. Vendored `App/menusystem/` in all three projects,
+  **byte-identical**. Canonical adopts LED_Strip's `x_type`/`c_key`/`pfn_`/`p_x_` naming,
+  with Mirror's `no_newline` + const, ANSI dropped, hide-on-NULL returns, `[At top-level
+  menu]` message, a bitfielded option-flag union (`MOPT_*`), `#pragma once`, and
+  `uart_stream`-style Doxygen. All build 0/0; SwitchTester bench-verified. See backlog item 5.
 - **uart_stream** — DONE 2026-08-08. Migrated into `G0B1_Skeleton`, bench-verified.
 - **automation_console** — DONE 2026-08-08 (see below).
 - **logging** — DONE 2026-08-09. Vendored as `App/logging/` with compile-time verbosity
@@ -141,7 +140,7 @@ with Skeleton's.
 | `logging` | yes | yes | yes | byte-identical across all three |
 | `uart_stream` | yes | yes | yes* | *LED_Strip re-vendored 2026-08-12, **live test owed** (backlog 7a) |
 | `automation_console` | yes | yes | **not yet, deferred** | long-term intent to migrate; blocked on the host-script cost, see below |
-| `menusystem` | yes | yes | organized* | `App/menusystem/` in all three (2026-08-13); SwitchTester+Skeleton byte-identical canonical (`item_type`/`key`). *LED_Strip relocated but code is its diverged `x_type`/`c_key` fork — naming reconciliation pending (backlog 5) |
+| `menusystem` | yes | yes | yes | `App/menusystem/` in all three, byte-identical (reconciled 2026-08-14); canonical is LED_Strip's `x_type`/`c_key`/`pfn_` naming + Doxygen + option-bitfield (backlog 5) |
 | `stdio_retarget` | yes | yes | **not yet, deferred** | not a vendored module anywhere yet; LED_Strip uses `syscalls_vfs.c` + `__io_*`. Assessed in S4 (`logging-api-plan.md`); LED_Strip-side plan and consumer audit in that project's `Docs/planning/stdio-retarget-migration-plan.md`. Behind 7a |
 | `nvmparams` | — | — | — | not built anywhere yet (backlog 3) |
 
