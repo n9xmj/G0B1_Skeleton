@@ -81,9 +81,9 @@ the on-media format and the internal seams such that phase 2 requires no refacto
 | **I6** | 🟢 | Reserve wear-levelling config fields in phase 1 |
 | **I7** | 🟢 | HIL/unit tests via the automation console; fault-injecting RAM driver |
 | **I8** | 🟢 | Auto-commit delay is defined in two places — keep `device_config.h`, drop `platform.h` |
-| **I9** | 🔴 | `x_mcuflash_write()` geometry bugs, carried into the example driver |
-| **I10** | 🔴 | Pool-size and alignment constraints the core must validate at init |
-| **I11** | 🟡 | Optional logging through an adopter-defined macro shim — no hard dependency |
+| **I9** | 🟢 | `x_mcuflash_write()` geometry bugs — fixed in the STM flash example driver |
+| **I10** | 🟢 | Pool-size and alignment constraints the core must validate at init |
+| **I11** | 🟢 | Optional logging through an adopter-defined macro shim — no hard dependency |
 | **I12** | 🟢 | Header include topology — config included from the middle of `nvmparams.h` |
 | **I13** | 🟢 | `x_nvm_list()` leaves the core entirely and ships as an example with its own header |
 | **I14** | 🟢 | Commit-timer accessors — the module manages the counter it already owns |
@@ -112,7 +112,7 @@ Each phase ends at something demonstrable, not at a feature grouping.
 
 | Phase | Status | What it proves | Contents |
 |---|---|---|---|
-| **1** | 🟡 | *The core runs on an adopter-supplied driver.* | Header split, config template, built-in drivers gutted, init rework, checked wrappers, commit-timer accessors, `x_nvm_list` extracted, STM flash + RAM examples, wear-levelling fields as no-op placeholders (I6), block-scan helper stub (I5), round-trip HIL smoke test, README foundation, Skeleton back-port |
+| **1** | 🟡 (10 of 12 steps done) | *The core runs on an adopter-supplied driver.* | Header split, config template, built-in drivers gutted, init rework, checked wrappers, commit-timer accessors, `x_nvm_list` extracted, STM flash + RAM examples, wear-levelling fields as no-op placeholders (I6), block-scan helper stub (I5), round-trip HIL smoke test, README foundation, Skeleton back-port |
 | **2** | 🔵 | *The interface is right.* | MX25R80 cherry-pick and severance (T4), thin SPI glue example, full HIL suite with fault injection, bench validation on real SPI hardware. **Earliest honest mirror-adoption point** |
 | **3** | 🔵 | *It is a product other projects can take.* | Wear levelling (W1), CRC implementations (D10), fileio example, LED_Strip introduction (T3), full README (T2), correctness review (W5) |
 
@@ -159,72 +159,63 @@ than step 4.
 | 11 | 🔴 | README foundation (T2, partial) | — |
 | 12 | 🔴 | Back-port the module — **not** the tests — to Skeleton (T3, partial) | **phase 1 complete** |
 
-**Realistic scope note.** Steps 1–8 plus a green bench is a substantial but plausible sitting.
-Steps 9–12 are each their own piece of work; the plan does not assume they all land together.
+### Status — steps 1–10 complete, bench-verified 2026-08-17
 
-### Build status — steps 1–8 complete, 2026-08-17
+**SwitchTester builds clean (0 errors, 0 warnings), runs on hardware, and both HIL suites pass:
+nvmparams 28/28, automation console 47/47 with no regression.**
 
-**SwitchTester builds clean: 0 errors, 0 warnings.** Step 8's `bench:` criterion is NOT met —
-nothing has been flashed or run. The pool has never been loaded on hardware.
+Steps 11 (README foundation) and 12 (Skeleton back-port) remain. Neither needs the bench.
 
-**Three real faults surfaced at first compile**, all worth recording because two of them were
-predicted by the design and then violated anyway:
+**What is proven on hardware:** the pool loads, parameters persist across a reset, and the
+rewritten STM32 flash driver erases and programs correctly — including the bank/page derivation,
+which could not be verified from the HAL headers alone. The commit timer's debounce behaves as
+I14 specifies.
 
-- **`nvm_media_t` was unreachable from the config header.** I12 established that anything the
-  config references must be defined *above* the include point, and the driver externs of I3
-  reference `nvm_media_t` — which had been placed in Part B. Fixed by moving `nvm_media_t`, the
-  three callback typedefs and `nvm_init_policy_t` into Part A, where they belong: none depends
-  on a configuration value. **Only `nvm_header_t` genuinely requires Part B**, because it embeds
-  `NVM_LABEL_MAX_LENGTH`. Worth stating as the rule for future additions.
-- **`#if NVM_ENABLE_INTERNAL_MALLOC` was evaluated before the config header defined it**, so
-  `<stdlib.h>` was silently dropped and `malloc`/`free` fell back to implicit declarations. Any
-  test of a config symbol must sit *after* `#include "nvmparams.h"`.
-- **A latent bug in the legacy flash driver** (adds to I9's list). `HAL_FLASHEx_Erase()` requires
-  `Banks` to be set and its `Page` is **bank-relative**, 0..(`FLASH_PAGE_NB` - 1). The old
-  `FLASH_PAGE()` macro produced an *absolute* index — 255 for a pool at `0x807F800` — and left
-  `Banks` zero-initialised, which is out of range on a dual-bank G0B1. The replacement derives
-  bank and bank-relative page from the address, guarded on `FLASH_BANK_2` so single- and
-  dual-bank configurations of the same part both work with no `#define` to keep in sync.
+**What the HIL suite proves** that hardware alone could not: every init policy against blank,
+corrupt and valid media; both erase polarities; reserved-ID enforcement and the deliberate
+`x_nvm_get` asymmetry; `NO_CHANGE` with device-write-count assertions; and the error paths —
+write faults leaving the pool dirty, read faults aborting init *without* formatting, and a
+driver's positive device code passing through unchanged. Those last are reachable only because
+the RAM driver can be made to fail on cue.
 
-**Also landed in step 8**, from I9: page count derived from the transfer size rather than
-hardcoded `NbPages = 1`, and the source copied into a local `uint64_t` with a `0xFF` tail pad
-instead of being cast through a masked pointer.
+#### Faults found and fixed along the way
 
-### Bench + suite status — steps 9 and 10 complete, 2026-08-17
+Three surfaced at first compile, two of them violations of rules this plan had already written:
 
-**nvmparams HIL suite: 28/28 passing. Existing acon suite: 47/47, no regression.**
+- **`nvm_media_t` was unreachable from the config header.** I12 says anything the config
+  references must be defined above the include point, and I3's driver externs reference it.
+  Fixed by moving `nvm_media_t`, the callback typedefs and `nvm_init_policy_t` into Part A.
+  **The rule for future additions: only `nvm_header_t` genuinely belongs in Part B**, because it
+  embeds `NVM_LABEL_MAX_LENGTH`.
+- **`#if NVM_ENABLE_INTERNAL_MALLOC` was evaluated before the config defined it**, so
+  `<stdlib.h>` was silently dropped. Any test of a config symbol must sit *after*
+  `#include "nvmparams.h"`.
+- **A latent bug in the legacy flash driver** (added to I9). `HAL_FLASHEx_Erase()` requires
+  `Banks` and takes a **bank-relative** page, 0..(`FLASH_PAGE_NB` - 1). The old `FLASH_PAGE()`
+  macro produced an absolute index — 255 for a pool at `0x807F800` — with `Banks` left zero.
+  The replacement derives both from the address, guarded on `FLASH_BANK_2`.
 
-The suite runs against a second pool (`g_x_nvm_test`) backed by the RAM driver, never the
-flash pool — so it can corrupt media, inject bus faults and re-init repeatedly at no risk to
-real parameters and no flash wear. It is also the only way the error paths are reachable at
-all: a real flash part cannot be asked to fail on cue.
+Two more came from the HIL suite, both caught by testing the *documented contract* rather than
+the code — which is the only way this class of bug surfaces:
 
-**Two genuine findings, both caught by tests written against the documented contract rather
-than against the code:**
+- **`NVM_ERROR_OBJECT_EXISTS` was declared, documented and never returned.** Long-standing
+  legacy behaviour; `x_nvm_create()` reported `NVM_ERROR_NONE` either way. Fixed.
+- **A reformat restarts `u32_write_count`**, contradicting S5's "never reset". Kept by decision
+  and S5 refined — see that row.
 
-**1. `NVM_ERROR_OBJECT_EXISTS` was declared, documented and never returned.**
-`x_nvm_create()` returned `NVM_ERROR_NONE` whether it created an object or found one already
-present — while its own doc block promised `OBJECT_EXISTS`. Long-standing legacy behaviour, not
-introduced by this rework. **Fixed** (user: *"If there's a bonafide inconsistency in the usage
-of OBJECT_EXISTS, then it should be corrected... this sort of issue is what the code review is
-supposed to catch and fix"*). All three existing call sites discard the result, and the mirror
-does little error checking on nvmparams calls, so the behavioural change is low risk. It gives
-an application a way to detect a first boot, or whether a provisioning step has already run.
+Two host-side bugs were mine: `Frame.tokens` is already `{KEY: int}`, and the firmware emits
+`nvm_error_t` sign-extended to 32 bits rather than 16.
 
-**2. A reformat resets `u32_write_count`, and that is now the DECIDED behaviour** rather than an
-oversight. S5 said the count is monotonic and never reset; formatting zero-wipes the pool, so it
-restarts at 1.
+#### Carried forward
 
-Resolved in favour of keeping the wipe (user): carrying a possibly-corrupt count forward is the
-dangerous direction — a spuriously high value would win block selection forever — whereas a low
-one merely loses until it is rewritten. **What actually matters for wear levelling is that every
-block ends up at the SAME count after a reformat, which a full wipe makes true by construction.**
-The cost is that the count is not a lifetime write total across reformats. The test now asserts
-the restart rather than monotonicity across it.
-
-**Not yet verified:** anything requiring hardware beyond what the suites cover. The ID renumbering means the existing pool
-will not be recognised and will reformat to defaults on first boot — expected, and the debug
-menu's `[N]` pool-erase command is the fallback if it does not clear cleanly.
+- **The ID renumbering** (anchoring at `NVM_ID_APP_FIRST`) means any pre-existing pool reformats
+  to defaults on first boot. Observed and expected; `[N]` in the debug menu is the fallback.
+- **`.c.example` files and their active copies in `App/Src/` can drift.** Nothing enforces the
+  match, and the likely failure is fixing the active copy and leaving the example stale, so the
+  next adopter inherits a bug already fixed here. The `.example` is canonical; T2 should say so.
+- **`x_nvm_pool_release()` commits before releasing**, which surprised the test harness — `N,R`
+  has to clear the dirty flag first or a deliberately corrupted device gets overwritten by the
+  release's own commit. Long-standing behaviour, left alone, but T2 should mention it.
 
 ---
 
@@ -1396,7 +1387,7 @@ section.
 
 The stray `#define SPIFLASH_NVM_DATA_ADDRESS 0x0400` goes at the same time.
 
-**Resolution:** _(pending)_
+**Resolution:** implemented in step 4. The core no longer names `.nvmdata`, and SwitchTester supplies `(uintptr_t) &_nvm_start` from the linker script.
 
 ### I2 — C-library-only dependencies *(resolved)*
 
@@ -1486,10 +1477,10 @@ write one config literal. No prototype editing at all in the common case.
 |---|---|---|
 | `nvm_driver_stm_flash.c.example` | **1 — required** | the real backend |
 | `nvm_driver_ram.c.example` | **1 — required** | degenerate teaching case; also I7's fault injector |
-| `nvm_driver_spiflash.c.example` | **1 — required as of 2026-08-17** | promoted from stretch: the mirror is migrating its NVM to SPI flash (LOCKED CONTEXT) |
+| `nvm_driver_spiflash.c.example` | **2 — required** | the mirror is migrating its NVM to SPI flash (LOCKED CONTEXT). Was briefly scoped into phase 1; the three-phase split moved it to 2, where it lands with the MX25R80 cherry-pick and the full HIL suite |
 | `nvm_driver_fileio.c.example` | **2** | developed and tested in LED_Strip, which already has a partition manager, VFS and littlefs with stdio integration |
-| `nvm_crc_sw_crc32.c.example` | 2 | D10 |
-| `nvm_crc_stm_hw.c.example` | 2 | D10 |
+| `nvm_crc_sw_crc32.c.example` | 3 | D10 |
+| `nvm_crc_stm_hw.c.example` | 3 | D10 |
 
 **Measured — SwitchTester's SPI hardware support is further along than assumed.** The user's
 note was that the W25Q128 has "no software support"; in fact `SwitchTester.ioc` already
@@ -1705,7 +1696,7 @@ project's config literal.
 Phase 1 should return `NVM_ERROR_PARAMETER` for `u8_wear_blocks > 1` rather than silently
 ignoring it.
 
-**Resolution:** _(pending)_
+**Resolution:** implemented in step 5. `u8_wear_blocks`, `u32_alloc_unit` and `u32_block_stride` are all present and inert with one block; init rejects a count above 1.
 
 ### I7 — HIL and unit tests *(resolved)*
 
@@ -1745,7 +1736,7 @@ commit; delete and its garbage collection; pool-full behaviour; object larger th
 `x_nvm_get` on a nonexistent ID; corrupt-pool detection; init against blank media; the
 fault-injection paths; and — once D9 lands — an attempt to use a reserved ID.
 
-**Resolution:** _(pending)_
+**Resolution:** implemented in step 10 and passing 28/28 on the bench. Coverage is broader than the phase-1 smoke test this row originally scoped, because the RAM driver made the error paths reachable cheaply.
 
 ### I8 — Auto-commit delay defined twice *(resolved)*
 
@@ -1763,9 +1754,12 @@ Note the split this reflects, which should be stated in T2: the auto-commit *tim
 — is entirely the application's. The module offers a place to keep the count and nothing more.
 Neither name belongs on D11's control panel for that reason: it is not a knob the module reads.
 
-### I9 — `x_mcuflash_write()` geometry bugs
+### I9 — `x_mcuflash_write()` geometry bugs *(resolved)*
 
-**Status:** 🔴 · **Needs user:** no
+**Status:** 🟢 · **Needs user:** no
+
+**All fixed in step 8**, while writing `nvm_driver_stm_flash.c.example`. A fourth fault, not on
+the original list, turned up in the process — see the bank/page note at the end.
 
 These carry into the example driver, so they get fixed as part of writing it rather than
 deferred to W5's review. All three are latent at the current 512-byte pool and become
@@ -1783,11 +1777,15 @@ wants, and RAM-emulation is an intended example. The `#if 0` FILE demo does not 
 written (`fread` with the wrong argument count, a read call in the write path,
 `x_status = ERRNO`); if it graduates to the shipped file driver it must actually build.
 
-**Resolution:** _(pending)_
+**Resolution:** all fixed in step 8, plus the bank/page fault found while writing the replacement. Not deferred to W5.
 
-### I10 — Constraints the core validates at init
+### I10 — Constraints the core validates at init *(resolved)*
 
-**Status:** 🔴 · **Needs user:** no
+**Status:** 🟢 · **Needs user:** no
+
+**Implemented in step 5** and covered by the HIL suite: pool size below `NVM_POOL_SIZE_MIN` or
+not a multiple of 4; `u8_wear_blocks > 1` with a zero allocation unit; and a NULL RAM buffer
+when `NVM_ENABLE_INTERNAL_MALLOC` is 0. All reject rather than clamp, per the guard policy.
 
 Now that pool geometry is adopter-supplied rather than compiled in, init is the only place
 these can be caught. Checks: **`u32_size >= NVM_POOL_SIZE_MIN` and a multiple of 4** (D6 —
@@ -1809,11 +1807,17 @@ misconfiguration into an init error:**
 Per the standing guard policy, init is a **host/automated-reachable** path in the HIL context,
 so it rejects rather than clamps.
 
-**Resolution:** _(pending)_
+**Resolution:** implemented in step 5, covered by the HIL suite.
 
-### I11 — Optional logging with no hard dependency
+### I11 — Optional logging with no hard dependency *(resolved)*
 
-**Status:** 🟡 · **Needs user:** no
+**Status:** 🟢 · **Needs user:** no
+
+**Implemented as designed.** `nvmparams.c` defines `NVM_LOG_ERROR` to `((void) 0)` when the
+adopter has not supplied one, and never mentions `logging.h` or any tag name. SwitchTester maps
+it to `LOGCT(LOG_NVM, ...)` in `nvmparams_config.h`, with the `LOG_NVM` class defined in
+`logging_config.h`. One ordering trap found at first compile and recorded under the build
+status: any `#if` on a config symbol must sit AFTER `#include "nvmparams.h"`.
 
 **Requirement (user):** nvmparams may use the logging API's `LOGCT()` macro, but must not
 *depend* on `logging` — consider a headless application that vendors nvmparams and has no
@@ -1863,7 +1867,7 @@ than each invocation being individually guarded.
 detection at init, a device error returned by a driver, and allocation failure. A vendored
 module that chatters is a nuisance to whoever adopts it.
 
-**Resolution:** _(pending)_
+**Resolution:** implemented in step 3/4 and exercised by the reserved-ID and pool-corrupt log paths.
 
 ### I12 — Header include topology *(resolved)*
 
@@ -2247,29 +2251,40 @@ piece of foresight owed is naming — see I14.
 
 ## Global notes
 
-**Phase-1 exit criteria**, as currently understood: the core has C-library-only dependencies;
-no built-in drivers; `nvmparams.h` holds no application-specific declarations; the adopter
-declares IDs through a documented mechanism with static enforcement of the reserved range; STM
-flash and RAM example drivers exist and work; the HIL suite covers the core including error
-paths; and the module is in Skeleton and LED_Strip as well as SwitchTester.
+**Phase-1 exit criteria.** The core has C-library-only dependencies ✅; no built-in drivers ✅;
+`nvmparams.h` holds no application-specific declarations ✅; the adopter declares IDs through a
+documented mechanism with static enforcement of the reserved range ✅; STM flash and RAM example
+drivers exist and work ✅; the HIL suite covers the core including error paths ✅; the README
+exists (T2) ⬜; and the module is in Skeleton (T3) ⬜.
 
-**T2's README is part of "shipped"** (user) — not an implementation blocker, so it need not
-gate coding, but phase 1 is not complete without it.
+LED_Strip is **not** a phase-1 requirement — its introduction is phase 3. An earlier version of
+this line said otherwise.
 
 **The two forward-compat commitments** that make phase 2 cheap are S5 and D10's plumbing.
 Together they mean phase 1's on-media format is already phase 2's, so no adopter who ships on
 phase 1 faces a migration.
 
-**Plan status: 30 🟢 · 1 🟡 · 3 🔴 · 9 🔵.**
+**Plan status: 32 🟢 · 1 🟡 · 2 🔴 · 9 🔵** — 36 board rows plus 8 wish items.
 
-**The design is complete.** Every Design and Semantics row is locked — D1–D12 and S1–S5 between
-them fix the driver interface, the behaviour a driver author must assume, the header split, the
-ID space, and init's policy. Nothing about the module's shape is still open.
+**The design is complete and the implementation is bench-proven.** Every Design and Semantics
+row is locked, and every Implementation row is green. Nothing about the module's shape is open.
 
-**What is not green is work, not decisions.** T4 (🟡) is the provenance boundary, recorded
-rather than debated. I9 and I10 (🔴) are fixes to apply while implementing. T2 and T3 (🔴) are
-phased deliverables — see the phase plan near the top.
+**What is left is writing, not deciding:**
+
+| Row | Work | Phase |
+|---|---|---|
+| **T2** 🔴 | The adoption README | 1 (foundation) → 3 (full) |
+| **T3** 🔴 | Back-port the module — not the tests — to Skeleton | 1; LED_Strip in 3 |
+| **T4** 🟡 | Provenance boundary for the MX25R80 cherry-pick — a recorded constraint, actioned when the SPI work starts | 2 |
+| **S6** 🔵 | Redundant commit after change-and-revert — deferred by decision, not pending | — |
 
 **Working mode reminder:** the user takes open rows one or two at a time in board order. Do not
 batch them, and never silently resolve a 🔴 or 🟡.
 
+**Two ACTION ITEMS held for phase 2**, both recorded in full under I3:
+
+1. **Change the CubeMX config before writing the SPI driver** — `PA15` must move from
+   `SPI3_NSS` (hardware NSS) to a plain GPIO output, so the driver can hold CS low across a
+   multi-phase flash command. The user asked to be reminded of this at that point.
+2. **Sever `sh/sh_err.h` and `sh/sh_log.h`** when the MX25R80 driver is cherry-picked, which is
+   both the technical requirement and the provenance requirement (T4).
