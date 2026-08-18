@@ -72,6 +72,7 @@ the on-media format and the internal seams such that phase 2 requires no refacto
 | **S3** | 🟢 | Init policy on blank / corrupt / unreadable media, selected from the config struct |
 | **S4** | 🟢 | `NVM_ERROR_NO_CHANGE` promoted from SwitchTester into the core |
 | **S5** | 🟢 | `u32_write_count` becomes a monotonic sequence number in phase 1 |
+| **S6** | 🔵 | Commit writes when RAM and device already match — deferred, not worth the machinery |
 | **I1** | 🟢 | Remove `nvm_mcu_flash[]` and the `.nvmdata` section dependency from the core |
 | **I2** | 🟢 | Core reduced to C-library-only dependencies |
 | **I3** | 🟢 | Example drivers ship as `*.c.example`, never compiled by any build system |
@@ -1255,6 +1256,76 @@ and does not reset it on reformat.
 **Resolution (user, locked):** phase 1 makes it monotonic, never reset, incremented on every
 commit.
 
+### S6 — Redundant commit after a change-and-revert *(deferred)*
+
+**Status:** 🔵 · **Needs user:** no
+
+**Found on the bench 2026-08-17.** Changing a cycling parameter 0 -> 1 and back to 0 inside the
+commit window still triggers a flash write, because `u8_need_commit` latches on any modifying
+call. The RAM pool is byte-identical to the device by then, so the erase/program cycle is
+wasted.
+
+**Already handled: setting a parameter to its EXISTING value.** `x_nvm_set()` memcmps first and
+does not dirty the pool if the value is unchanged. The legacy code was already doing this; only
+the change-and-revert case escapes it.
+
+**Why the obvious fix does not generalise** (user): the old code could have compared the RAM
+pool against memory-mapped flash. With adopter-supplied drivers the device need not be in the
+address space at all -- it may be SPI, I2C, or a file.
+
+**Option 1 -- reuse the CRC as a change detector. Agent recommendation.** At commit, recompute
+the data CRC and compare it against `u32_crc` in the header, which still holds the value written
+by the *previous* commit, since nothing else touches it. Equal means the data is byte-identical
+to what is stored, with no device read and no address-space assumption. It bootstraps correctly
+from cold, because init loads the header from the device.
+
+- **No new driver interface, no extra RAM, no device access.**
+- **The NULL-CRC fallback is free**: with no CRC function the field holds
+  `NVM_CRC_PLACEHOLDER`, which never matches a computed CRC, so the check degrades to "always
+  write" -- exactly the assume-mismatch behaviour the user asked for.
+- **Gives the CRC a second job**, turning it from an integrity check into an erase-cycle saver.
+  An argument for pulling D10's implementations earlier than phase 3, given the mirror is moving
+  to SPI flash over endurance in the first place.
+- **Cost, stated plainly:** a CRC-32 collision skips a write that was needed -- about 2e-10 per
+  commit. One commit a minute for ten years is roughly a 1-in-800 chance of ever occurring, and
+  the failure mode is "one parameter change did not persist", not corruption. It is nonetheless
+  a SILENT failure rather than a noisy one.
+
+**Option 2 -- shadow copy.** Keep the last-committed image in RAM and memcmp. Exact, no device
+access, no new driver function, works without a CRC. Costs one pool-size buffer: nothing on a
+G0B1 with 144 KB, but 6% of RAM on a G030 with a 512-byte pool. Fits as an opt-in knob,
+`NVM_ENABLE_COMMIT_SHADOW`.
+
+**Option 3 -- the user's compare driver.** An optional third driver function comparing RAM
+against device, NULL meaning assume-mismatch. Exact and costs no RAM, but burdens the adopter
+with another function and requires reading the whole pool back. Note this is a good trade on
+SPI flash specifically, where reads are fast and free while erases are slow and consume
+endurance.
+
+**Leaning:** option 1 as the default, option 2 as an opt-in knob for exactness without a CRC,
+option 3 as a wish item -- it only wins on a RAM-constrained target with a slow-to-read device,
+a narrow intersection.
+
+**Right-sizing:** change-and-revert inside the commit window is largely a menu-fiddling pattern,
+which is what surfaced it. Automated and in-service use rarely does it, so the wasted erase is
+real but infrequent.
+
+**Resolution (user, 2026-08-17): DEFERRED. None of the three options will be built.**
+
+The set-level guard already in `x_nvm_set()` "really does cover the majority of real-world
+cases" — a parameter written back at its existing value is common enough to warrant a guard,
+and it has one. A value flipping away and back inside the commit window is *"much less common;
+my test was something of an artificial one."*
+
+A full byte-for-byte compare would be warranted for a mission-critical application — the user's
+example was a long-endurance space probe — and this library is not aimed at anything of the
+kind. That is consistent with the Brief: a lean parameter store for resource-constrained
+targets, which has run for years on signature-only validation.
+
+**Reopen only if** a real deployment shows erase cycles mattering more than expected. Option 1
+(CRC as change detector) remains the cheapest route back, and costs nothing to leave unbuilt
+because it needs no groundwork in phase 1.
+
 ### I1 — Remove the built-in flash buffer and linker-section dependency *(resolved)*
 
 **Status:** 🟢 · **Needs user:** no
@@ -1441,6 +1512,49 @@ what S1's contract says belongs in a driver rather than the core:
 
 Keeping the example minimal also leaves SwitchTester free to vendor the fuller `spiflash`
 module later for bench work — that is SwitchTester's business, not nvmparams'.
+
+### SPI driver — context struct, and an ACTION ITEM for the bench
+
+**`p_v_context` finally earns its keep here** (user, 2026-08-17), and more convincingly than the
+file-path case that originally justified it. The context points at a small struct carrying the
+SPI handle plus the chip-select GPIO, so **one driver source works against any SPI instance and
+any CS arrangement with no edit to the driver** — which is the "never edit a vendored file"
+principle applied to hardware binding. It composes too: two flash chips on one bus are two
+contexts and two pools, with no driver change.
+
+Shape, with the HAL type names verified against this project's headers — note
+`HAL_GPIO_WritePin()` takes the pin as **`uint16_t`**, not `uint32_t`, and `GPIO_TypeDef` comes
+from CMSIS rather than the HAL:
+
+```c
+typedef struct
+{
+    SPI_HandleTypeDef *p_x_hspi;      /* HAL SPI handle */
+    GPIO_TypeDef      *p_x_cs_port;   /* NULL = rely on the SPI IP's automatic NSS */
+    uint16_t           u16_cs_pin;    /* GPIO_PIN_x mask */
+}
+nvm_spiflash_ctx_t;
+```
+
+A NULL `p_x_cs_port` selects hardware NSS; otherwise the driver drives CS itself.
+
+> **ACTION ITEM — change the CubeMX configuration before writing the SPI driver.**
+> `SwitchTester.ioc` currently has `PA15.Mode=NSS_Signal_Hard_Output` and
+> `SPI3.VirtualNSS=VM_NSSHARD`, i.e. hardware NSS. **PA15 must become a plain GPIO output**
+> so the driver can hold CS low manually. The user asked to be reminded of this at that point.
+
+**Why hardware NSS is the wrong branch for a flash device.** Hardware NSS output drives the line
+low while the SPI peripheral is enabled and high when it is disabled. A flash transaction is
+command → address → data, which means separate `HAL_SPI_Transmit`/`HAL_SPI_Receive` calls, and
+CS must stay asserted across all of them — a deassert between phases aborts the command and the
+device ignores it. Whether it stays low depends on whether the HAL leaves `SPE` set between
+calls, which is precisely the kind of thing that works on one part and silently does not on
+another.
+
+Keep the NULL-port branch regardless: it is correct for devices where a single transfer is the
+whole transaction, and for adopters whose SPI IP handles CS properly. It simply must not be the
+path this bench exercises, because it is the one that cannot hold CS across a multi-phase
+command.
 
 **Risk being accepted if SPI slips.** The W25Q128 was wired to this bench specifically so the
 pluggable driver layer could be exercised against a *real second backend*, on the reasoning
@@ -2107,7 +2221,7 @@ gate coding, but phase 1 is not complete without it.
 Together they mean phase 1's on-media format is already phase 2's, so no adopter who ships on
 phase 1 faces a migration.
 
-**Plan status: 30 🟢 · 1 🟡 · 3 🔴 · 8 🔵.**
+**Plan status: 30 🟢 · 1 🟡 · 3 🔴 · 9 🔵.**
 
 **The design is complete.** Every Design and Semantics row is locked — D1–D12 and S1–S5 between
 them fix the driver interface, the behaviour a driver author must assume, the header split, the

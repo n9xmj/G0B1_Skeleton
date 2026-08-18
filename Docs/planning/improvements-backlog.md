@@ -425,3 +425,39 @@ What to exercise, in order:
 
 Bench: ST-Link SN `0020002E3137510939383538`, COM5 @ 921600 (`scripts/bench.defaults.json`).
 The `/roundtrip`, `/flash` and `/smoke` skills in that repo drive it.
+
+## 8. automation_console — document the error-code namespace (LOW PRIORITY, docs only)
+
+Found 2026-08-17 while adding the nvmparams HIL suite to SwitchTester. Not a defect; a
+documentation gap with a mild footgun behind it.
+
+**How the codes are actually split**, which is the right layering and is not being changed:
+
+| Code | Home | Owner |
+|---|---|---|
+| `ACON_ERR_UNKNOWN` / `_ARGS` / `_RANGE` / `_OVERFLOW` | `automation_console.h` | vendored module — protocol level |
+| `ACON_ERR_DUPLICATE` | `automation_console.c` | vendored module — internal |
+| `ACON_ERR_BUSY` / `_NVM` | `automation_commands.c` | **application** |
+| `ACON_ERR_POOL` | `nvm_test.c` | **application** |
+
+The module owns the generic protocol codes and stays identical across projects; the application
+owns its domain codes, because the module cannot know what "cycling in progress" means.
+
+**The gap:** nothing tells an adopter that the namespace is shared, or that application codes
+must not collide with the core ones. Codes are plain strings in a reply frame, so a collision is
+a *semantic* failure — a host asserting on `"NVM"` cannot tell which layer emitted it — rather
+than a compile error, which is the worse kind of failure.
+
+**Decision (user, 2026-08-17): fix it in the adoption README, not in code.**
+
+> "There is merit to having all error codes defined in one common location, but it seems to me
+> that this would just complicate the vendoring and adoption process. I'm seeking to strike a
+> balance between fault tolerance / (foot)gun safety and simplicity with my vendored products."
+
+So: a paragraph in `App/automation_console/README.md` listing the reserved core codes and
+warning the adopter to keep clear of them. Explicitly **not** a shared `acon_app_errors.h`, and
+explicitly not a change to where anything is defined.
+
+**Also worth a line in the same README** while it is open: application error codes may end up
+spread across several application files (SwitchTester has them in two), which is fine, but the
+adopter is the only one who can keep them consistent.
