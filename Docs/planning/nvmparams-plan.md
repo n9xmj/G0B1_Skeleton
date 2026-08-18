@@ -90,7 +90,7 @@ the on-media format and the internal seams such that phase 2 requires no refacto
 | **T1** | 🟢 | This plan lives in Skeleton |
 | **T2** | 🟢 | Module README — adoption instructions |
 | **T3** | 🟡 | Skeleton done; LED_Strip introduction is phase 3 |
-| **T4** | 🟡 | Provenance boundary for cherry-picked code — no confidential work code in a public repo |
+| **T4** | 🟢 | Provenance boundary honored by grafting the user's *own* legacy `MX25R80.c` (not the `ee_fw-lib` stub); no confidential work code in the public repo |
 
 ### Wish list (phase 2+)
 
@@ -113,7 +113,7 @@ Each phase ends at something demonstrable, not at a feature grouping.
 | Phase | Status | What it proves | Contents |
 |---|---|---|---|
 | **1** | 🟢 | *The core runs on an adopter-supplied driver.* | Header split, config template, built-in drivers gutted, init rework, checked wrappers, commit-timer accessors, `x_nvm_list` extracted, STM flash + RAM examples, wear-levelling fields as no-op placeholders (I6), block-scan helper stub (I5), round-trip HIL smoke test, README foundation, Skeleton back-port |
-| **2** | 🔵 | *The interface is right.* | MX25R80 cherry-pick and severance (T4), thin SPI glue example, full HIL suite with fault injection, bench validation on real SPI hardware. **Earliest honest mirror-adoption point** |
+| **2** | 🟡 | *The interface is right.* | **In progress.** SPI-flash bring-up + minimal `nvm_driver_spiflash.c` **done & verified** (28/28 HIL on real W25Q128 + reset-persistence); MX25R80 grafted from the user's own legacy (T4), SPI3+DMA. Remaining: the vendorable part-agnostic `spiflash` module, full fault-injection review. **Earliest honest mirror-adoption point** |
 | **3** | 🔵 | *It is a product other projects can take.* | Wear levelling (W1), CRC implementations (D10), fileio example, LED_Strip introduction (T3), full README (T2), correctness review (W5) |
 
 **Exit criteria.** Phase 1: SwitchTester boots, pool loads, parameters survive a reset, build
@@ -2136,7 +2136,30 @@ that exercises a real second backend on this bench.
 
 ### T4 — Provenance boundary for cherry-picked code
 
-**Status:** 🟡 · **Needs user:** no — the user has set the boundary; this records it
+**Status:** 🟢 · **Resolved 2026-08-18** — the boundary is set and honored.
+
+**Resolution (2026-08-18).** The `ee_fw-lib` template was **not** used: on inspection it is a
+non-functional stub (CS `HAL_GPIO_WritePin` commented out, SPI handle hardcoded `NULL`, JEDEC
+type/capacity bytes marked "verify from datasheet"). Instead the user's **own** legacy
+`App/Src/MX25R80.c` was grafted into SwitchTester with the pseudo-filesystem/directory support
+stripped — the provenance-cleanest path (sole authorship, nothing from the work library), so the
+"no confidential code in a public repo" constraint is satisfied outright and the `sh/sh_err.h` +
+`sh/sh_log.h` severance never arises. The graft is temporary testbed scaffolding; the vendorable
+part-agnostic `spiflash` module (still phase 2) will likewise be built from the legacy, not the
+template.
+
+**Portability finding — RDID opcode (2026-08-18).** The legacy `read_id` transmitted **`0x9E`**,
+a Macronix-specific alias the mirror's MX25R part happens to answer. The JEDEC-standard Read-ID
+is **`0x9F`**; `0x9E` is unanswered by W25Q/SST parts, which read `00 00 00` and look exactly
+like dead wiring. The vendorable module **must** use `0x9F` (density decode: 3rd ID byte is
+log₂(bytes)). This cost a long bench session before the transmitted opcode was checked — read
+what the firmware actually sends before chasing a wiring hunt.
+
+---
+
+**Original analysis (superseded by the resolution above; kept for the reasoning).**
+
+**Status:** was 🟡 · **Needs user:** no — the user has set the boundary; this records it
 
 **Constraint (user, 2026-08-17):** SwitchTester is a **public** repository. Private or
 confidential work code must not land in it. The `ee_fw-lib` library as a whole is **not** to be
@@ -2292,7 +2315,8 @@ this line said otherwise.
 Together they mean phase 1's on-media format is already phase 2's, so no adopter who ships on
 phase 1 faces a migration.
 
-**Plan status: 33 🟢 · 2 🟡 · 0 🔴 · 9 🔵** — 36 board rows plus 8 wish items.
+**Plan status: 34 🟢 · 1 🟡 · 0 🔴 · 9 🔵** — 36 board rows plus 8 wish items. (T4 resolved
+2026-08-18; T3 is the lone 🟡, its LED_Strip half held for phase 3.)
 
 **PHASE 1 IS COMPLETE.** All twelve implementation steps are done, both projects build 0/0,
 SwitchTester is bench-verified, and both HIL suites pass (nvmparams 28/28, acon 47/47).
@@ -2306,17 +2330,32 @@ questions:
 | **T4** 🟡 | Provenance boundary for the MX25R80 cherry-pick — a recorded constraint, actioned when phase 2 starts |
 | **S6** 🔵 | Redundant commit after change-and-revert — deferred by decision, not pending |
 
-**Phase 2 starts here:** MX25R80 cherry-pick and severance (T4), the thin SPI glue example, the
-full HIL suite with fault injection, and bench validation on SPI hardware. That phase is also
-the earliest honest mirror-adoption point.
+**Phase 2 — in progress (2026-08-18).** The SPI-flash bring-up and a minimal nvmparams flash
+driver are **done and fully verified on SwitchTester**, ahead of the vendorable module:
+
+- **Grafted the legacy `MX25R80.c` directly** (the user's own code) with the pseudo-filesystem
+  stripped — provenance-cleanest, and why the `ee_fw-lib` template was *not* used (it is a
+  non-functional stub). See T4.
+- **PA15 moved off hardware NSS to a plain GPIO output** (action item 1 — done); **SPI3 TX/RX
+  DMA** added (DMA1 Ch1 RX / Ch2 TX) and verified.
+- **`App/Src/nvm_driver_spiflash.c`** — minimal storage driver (read/write over the chip driver,
+  erase-before-write via `u8_spiflash_write`). A flash-backed pool + an `N,P` backend selector
+  let the existing HIL suite target flash.
+- **Verified:** nvmparams HIL **28/28 on real SPI flash** (fault injection, corrupt/blank, full
+  lifecycle) **plus a persistence-across-hardware-reset test** — the flash-only proof RAM cannot
+  give. Bench part: Winbond **W25Q128**, which also proves the driver already spans beyond
+  Macronix.
+- **RDID `0x9E`→`0x9F` portability fix** — see T4.
+
+**Still open in phase 2:** the vendorable, part-agnostic `spiflash` module (runtime multi-device
+via `p_v_context`, `0x9F` RDID, capacity from the JEDEC density byte); wear levelling (W1); the
+CRC implementations (D10); the full correctness review (W5). The minimal graft is a testbed
+stepping-stone slated for replacement by that module. This remains the earliest honest
+mirror-adoption point.
 
 **Working mode reminder:** the user takes open rows one or two at a time in board order. Do not
 batch them, and never silently resolve a 🔴 or 🟡.
 
-**Two ACTION ITEMS held for phase 2**, both recorded in full under I3:
-
-1. **Change the CubeMX config before writing the SPI driver** — `PA15` must move from
-   `SPI3_NSS` (hardware NSS) to a plain GPIO output, so the driver can hold CS low across a
-   multi-phase flash command. The user asked to be reminded of this at that point.
-2. **Sever `sh/sh_err.h` and `sh/sh_log.h`** when the MX25R80 driver is cherry-picked, which is
-   both the technical requirement and the provenance requirement (T4).
+**Action items — status:** (1) PA15 → GPIO output: **done**. (2) Sever `sh/sh_err.h` /
+`sh/sh_log.h`: **moot** — the `ee_fw-lib` template was abandoned for the legacy graft, which has
+no `sh` dependencies.
