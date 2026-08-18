@@ -88,8 +88,8 @@ the on-media format and the internal seams such that phase 2 requires no refacto
 | **I13** | 🟢 | `x_nvm_list()` leaves the core entirely and ships as an example with its own header |
 | **I14** | 🟢 | Commit-timer accessors — the module manages the counter it already owns |
 | **T1** | 🟢 | This plan lives in Skeleton |
-| **T2** | 🔴 | Module README — adoption instructions |
-| **T3** | 🔴 | Port to Skeleton, introduce to LED_Strip |
+| **T2** | 🟢 | Module README — adoption instructions |
+| **T3** | 🟡 | Skeleton done; LED_Strip introduction is phase 3 |
 | **T4** | 🟡 | Provenance boundary for cherry-picked code — no confidential work code in a public repo |
 
 ### Wish list (phase 2+)
@@ -112,7 +112,7 @@ Each phase ends at something demonstrable, not at a feature grouping.
 
 | Phase | Status | What it proves | Contents |
 |---|---|---|---|
-| **1** | 🟡 (10 of 12 steps done) | *The core runs on an adopter-supplied driver.* | Header split, config template, built-in drivers gutted, init rework, checked wrappers, commit-timer accessors, `x_nvm_list` extracted, STM flash + RAM examples, wear-levelling fields as no-op placeholders (I6), block-scan helper stub (I5), round-trip HIL smoke test, README foundation, Skeleton back-port |
+| **1** | 🟢 | *The core runs on an adopter-supplied driver.* | Header split, config template, built-in drivers gutted, init rework, checked wrappers, commit-timer accessors, `x_nvm_list` extracted, STM flash + RAM examples, wear-levelling fields as no-op placeholders (I6), block-scan helper stub (I5), round-trip HIL smoke test, README foundation, Skeleton back-port |
 | **2** | 🔵 | *The interface is right.* | MX25R80 cherry-pick and severance (T4), thin SPI glue example, full HIL suite with fault injection, bench validation on real SPI hardware. **Earliest honest mirror-adoption point** |
 | **3** | 🔵 | *It is a product other projects can take.* | Wear levelling (W1), CRC implementations (D10), fileio example, LED_Strip introduction (T3), full README (T2), correctness review (W5) |
 
@@ -156,8 +156,8 @@ than step 4.
 | 8 | 🟢 | `nvm_driver_stm_flash.c.example`; SwitchTester config literal using `_nvm_start` (I1); `NbPages` and doubleword fixes (I9) | **bench: pool loads, commits, survives reset** |
 | 9 | 🟢 | `nvm_driver_ram.c.example` (I3) | — |
 | 10 | 🟢 | Round-trip HIL smoke test: create/set/commit/reset/get + `NVM_ERROR_NO_CHANGE` (I7) | **suite green** |
-| 11 | 🔴 | README foundation (T2, partial) | — |
-| 12 | 🔴 | Back-port the module — **not** the tests — to Skeleton (T3, partial) | **phase 1 complete** |
+| 11 | 🟢 | Adoption README (T2) | — |
+| 12 | 🟢 | Back-port the module — **not** the tests — to Skeleton (T3, partial) | **phase 1 complete** |
 
 ### Status — steps 1–10 complete, bench-verified 2026-08-17
 
@@ -1813,6 +1813,10 @@ so it rejects rather than clamps.
 
 **Status:** 🟢 · **Needs user:** no
 
+**Both paths verified by real builds (2026-08-17):** SwitchTester defines the shim and routes to
+`LOGCT`; Skeleton leaves it undefined and builds clean, which is what actually proves the module
+carries no logging dependency.
+
 **Implemented as designed.** `nvmparams.c` defines `NVM_LOG_ERROR` to `((void) 0)` when the
 adopter has not supplied one, and never mentions `logging.h` or any tag name. SwitchTester maps
 it to `LOGCT(LOG_NVM, ...)` in `nvmparams_config.h`, with the `LOG_NVM` class defined in
@@ -2031,10 +2035,21 @@ nvmparams is not a SwitchTester feature. The contract document for this work is
 **Resolution:** Plan lives in Skeleton. Design-doc sync target is the module README and the
 strategy doc, not `SwitchTester-Design.md`.
 
-### T2 — Module README
+### T2 — Module README *(done)*
 
-**Status:** 🔴 · **Needs user:** no · **Required before phase 1 can be called shipped**
-(user) — but explicitly *not* an implementation blocker.
+**Status:** 🟢 · **Needs user:** no
+
+**Written 2026-08-17** as `App/nvmparams/README.md`, and it covers more than the "foundation"
+this row originally scoped — writing it against a finished, bench-proven module rather than a
+design turned out to be much easier than writing it early would have been.
+
+Sections: what the module is and is not; file manifest with the vendored/template/example
+split; five-step adoption; the config knobs; parameter IDs and the reserved range; the driver
+contract with the four readings of `ux_address`; a minimal integration snippet; init policy with
+the four media outcomes; committing and the auto-commit timer; the linker-script recipe; and a
+gotchas section.
+
+**Phase 3 revisits it** for wear levelling, the CRC implementations and the fileio driver.
 
 Per backlog item 6, each vendored module carries an adoption README. For nvmparams it must
 cover: the file manifest (core versus optional `.example` files versus adopter-owned); the
@@ -2088,9 +2103,22 @@ signature reads as intact, and CRC does not catch it because it is not corrupt);
 CRC-enablement migration from D10; the label-length hazard from D12; I14's level-triggered
 commit predicate; and D8's asymmetry, where `x_nvm_get` accepts an ID that `x_nvm_set` rejects.
 
-### T3 — Port to Skeleton, introduce to LED_Strip
+### T3 — Port to Skeleton, introduce to LED_Strip *(half done)*
 
-**Status:** 🔴 · **Needs user:** no
+**Status:** 🟡 · **Needs user:** no
+
+**Skeleton: DONE 2026-08-17, builds 0/0.** It carries `App/nvmparams/` with the module, the
+examples and the README; `App/Inc/nvmparams_config.h` with a single example parameter; the STM
+flash driver as `App/Src/nvm_driver_stm_flash.c`; the pool instantiated in `app_main.c` and
+exported from `globals.h`; and the auto-commit block rewritten onto I14's accessors. The old
+`App/Src/nvmparams.c` and `App/Inc/nvmparams.h` are gone. **The test suite was deliberately not
+copied** — Skeleton is the minimal baseline (I7).
+
+**Skeleton leaves `NVM_LOG_ERROR` undefined on purpose**, which is the first thing to actually
+exercise I11's claim that the module names no logging library and compiles away every log site.
+SwitchTester defines it, so both paths are now covered by a real build.
+
+**LED_Strip is phase 3** — an introduction rather than a port, since it has no nvmparams today.
 
 Phase-1 development happens in SwitchTester; the core then goes up to Skeleton per the
 back-port model, and LED_Strip receives it.
@@ -2264,19 +2292,23 @@ this line said otherwise.
 Together they mean phase 1's on-media format is already phase 2's, so no adopter who ships on
 phase 1 faces a migration.
 
-**Plan status: 32 🟢 · 1 🟡 · 2 🔴 · 9 🔵** — 36 board rows plus 8 wish items.
+**Plan status: 33 🟢 · 2 🟡 · 0 🔴 · 9 🔵** — 36 board rows plus 8 wish items.
 
-**The design is complete and the implementation is bench-proven.** Every Design and Semantics
-row is locked, and every Implementation row is green. Nothing about the module's shape is open.
+**PHASE 1 IS COMPLETE.** All twelve implementation steps are done, both projects build 0/0,
+SwitchTester is bench-verified, and both HIL suites pass (nvmparams 28/28, acon 47/47).
 
-**What is left is writing, not deciding:**
+Every Design, Semantics and Implementation row is green. The two remaining 🟡 are not open
+questions:
 
-| Row | Work | Phase |
-|---|---|---|
-| **T2** 🔴 | The adoption README | 1 (foundation) → 3 (full) |
-| **T3** 🔴 | Back-port the module — not the tests — to Skeleton | 1; LED_Strip in 3 |
-| **T4** 🟡 | Provenance boundary for the MX25R80 cherry-pick — a recorded constraint, actioned when the SPI work starts | 2 |
-| **S6** 🔵 | Redundant commit after change-and-revert — deferred by decision, not pending | — |
+| Row | State |
+|---|---|
+| **T3** 🟡 | Skeleton back-port done; LED_Strip introduction is phase 3 work |
+| **T4** 🟡 | Provenance boundary for the MX25R80 cherry-pick — a recorded constraint, actioned when phase 2 starts |
+| **S6** 🔵 | Redundant commit after change-and-revert — deferred by decision, not pending |
+
+**Phase 2 starts here:** MX25R80 cherry-pick and severance (T4), the thin SPI glue example, the
+full HIL suite with fault injection, and bench validation on SPI hardware. That phase is also
+the earliest honest mirror-adoption point.
 
 **Working mode reminder:** the user takes open rows one or two at a time in board order. Do not
 batch them, and never silently resolve a 🔴 or 🟡.

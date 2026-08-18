@@ -60,9 +60,59 @@ void v_print_startup_banner(void)
 
 uint32_t u32_test_param_1;
 
+/* The application's parameter pool. Owned here, exported via globals.h --
+ * nvmparams no longer pre-declares a pool of its own. */
+nvm_pool_t g_x_nvm_param;
+
+/*----------------------------------------------------------------------------
+ * Pool configuration.
+ *
+ * const, so it lives in flash: nvmparams never writes to it and does not
+ * retain the pointer once init returns -- it copies what it needs.
+ *
+ * The base address comes from the linker script rather than from a buffer
+ * declared with __attribute__((section(".nvmdata"))). See the NVM_FLASH region
+ * and the .nvmdata section in STM32G0B1RETX_FLASH.ld.
+ *--------------------------------------------------------------------------*/
+
+extern uint32_t _nvm_start;         /* provided by the linker script */
+
+static const nvm_pool_config_t x_nvm_param_config =
+{
+    /* Stored in the pool header; informational only. */
+    .p_c_label       = "PARAMS",
+
+    /* Storage driver. Swap these two for another example, or your own. */
+    .pfn_read        = x_nvm_drv_stm_flash_read,
+    .pfn_write       = x_nvm_drv_stm_flash_write,
+
+    /* Where the pool lives. For a SPI or file backend this same field would be
+     * a byte offset rather than an address. */
+    .ux_base_address = (uintptr_t) &_nvm_start,
+
+    /* Must be a multiple of 4 and at least NVM_POOL_SIZE_MIN. */
+    .u32_size        = NVM_POOL_SIZE_DEFAULT,
+
+    /* The device's erase granularity -- one 2 KB page on the STM32G0. Inert
+     * until wear levelling exists, but it documents the hardware. */
+    .u32_alloc_unit  = FLASH_PAGE_SIZE,
+
+    /* Not used here -- shown for reference. Each defaults to 0/NULL, and each
+     * zero value means the feature is simply off. */
+//  .pfn_crc         = NULL,                        /* signature-only validation */
+//  .p_v_ram_buffer  = NULL,                        /* allocate the pool internally */
+//  .p_v_context     = NULL,                        /* nothing to pass to the driver */
+//  .u8_wear_blocks  = 0,                           /* no wear levelling */
+//  .x_init_policy   = NVM_INIT_FORMAT_IF_BLANK,    /* format blank, refuse corrupt */
+};
+
 void v_param_init(void)
 {
-    x_nvm_pool_init(&g_x_nvm_param, NVM_DEVICE_MCUFLASH, NULL, 0, "PARAMS");
+    /* Test against NVM_ERROR_NONE, never "< 0" and never against a list of
+     * known codes: a driver may return a positive device-specific value.
+     * POOL_FORMATTED means the media was blank and nothing was lost;
+     * POOL_REFORMATTED would mean data was destroyed. */
+    (void) x_nvm_pool_init(&g_x_nvm_param, &x_nvm_param_config);
 
     /* Example persistent parameter. Replace / extend for real use. */
     u32_test_param_1 = 0xDEAD;
@@ -162,15 +212,17 @@ static void v_periodic_int_test(void)
 
 static void v_timer_update(void)
 {
-    /* NVM auto-commit check */
-    if (g_x_nvm_param.u8_need_commit
-        && (g_x_nvm_param.u16_commit_timer < DEV_CONFIG_NVM_COMMIT_DELAY_MS))
+    /* NVM auto-commit check. Both calls are no-ops while nothing needs
+     * committing, so neither needs an outer guard. The timer measures time
+     * since the LAST change, not the first, so a pool under continuous
+     * modification defers indefinitely -- deliberate, and the reason to call
+     * x_nvm_commit() directly where a write must happen regardless, such as
+     * before power-down. */
+    v_nvm_commit_timer_tick(&g_x_nvm_param, PERIODIC_TIMER_INTERVAL_MS);
+
+    if (b_nvm_commit_time_elapsed(&g_x_nvm_param, DEV_CONFIG_NVM_COMMIT_DELAY_MS))
     {
-        g_x_nvm_param.u16_commit_timer += PERIODIC_TIMER_INTERVAL_MS;
-        if (g_x_nvm_param.u16_commit_timer >= DEV_CONFIG_NVM_COMMIT_DELAY_MS)
-        {
-            v_job_add(NULL, JOB_NVM_COMMIT);
-        }
+        v_job_add(NULL, JOB_NVM_COMMIT);
     }
 }
 
