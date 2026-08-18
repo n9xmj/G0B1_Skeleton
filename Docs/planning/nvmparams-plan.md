@@ -147,12 +147,12 @@ than step 4.
 |---|---|---|---|
 | 1 | 🟢 | `App/nvmparams/` created; `nvmparams_config.h.example` written (D11) | new files only |
 | 2 | 🟢 | `nvmparams.h` restructured: Part A / config include / Part B (I12), `nvm_param_id_t` → `uint16_t` (D7), reserved-ID constants (D9), `nvm_media_t` + callback typedefs (D1, D10), `nvm_pool_config_t` (D5), new result codes (S3, D8) | header compiles standalone |
-| 3 | 🟡 | App-owned `nvmparams_config.h`: anchored ID enum + `_Static_assert` (D8), knobs, log shim (I11) | — |
-| 4 | 🔴 | `nvmparams.c`: delete `nvm_mcu_flash[]`, `x_mcuflash_write()`, the `NVM_DEVICE_*` switches, `SPIFLASH_NVM_DATA_ADDRESS`, the `u32_crc32()` stub, the `#if 0` FILE demo (I1, I2) | — |
-| 5 | 🔴 | `x_nvm_pool_init()` reworked to the config struct, with blank/corrupt/unreadable classification and policy (S3), validation (I10, D6), block-scan stub (I5), format-by-block-index (W1) | — |
-| 6 | 🔴 | Checked wrappers over `_unchecked` internals + `nvmparams_internal.h` (D8); commit-timer accessors (I14); `u32_write_count` monotonic (S5) | — |
-| 7 | 🔴 | `x_nvm_list()` out to `nvm_list.c.example` + `nvm_list.h` (I13); call sites updated | **build green** |
-| 8 | 🔴 | `nvm_driver_stm_flash.c.example`; SwitchTester config literal using `_nvm_start` (I1); `NbPages` and doubleword fixes (I9) | **bench: pool loads, commits, survives reset** |
+| 3 | 🟢 | App-owned `nvmparams_config.h`: anchored ID enum + `_Static_assert` (D8), knobs, log shim (I11) | — |
+| 4 | 🟢 | `nvmparams.c`: delete `nvm_mcu_flash[]`, `x_mcuflash_write()`, the `NVM_DEVICE_*` switches, `SPIFLASH_NVM_DATA_ADDRESS`, the `u32_crc32()` stub, the `#if 0` FILE demo (I1, I2) | — |
+| 5 | 🟢 | `x_nvm_pool_init()` reworked to the config struct, with blank/corrupt/unreadable classification and policy (S3), validation (I10, D6), block-scan stub (I5), format-by-block-index (W1) | — |
+| 6 | 🟢 | Checked wrappers over `_unchecked` internals + `nvmparams_internal.h` (D8); commit-timer accessors (I14); `u32_write_count` monotonic (S5) | — |
+| 7 | 🟢 | `x_nvm_list()` out to `nvm_list.c.example` + `nvm_list.h` (I13); call sites updated | **build green** |
+| 8 | 🟢 | `nvm_driver_stm_flash.c.example`; SwitchTester config literal using `_nvm_start` (I1); `NbPages` and doubleword fixes (I9) | **bench: pool loads, commits, survives reset** |
 | 9 | 🔴 | `nvm_driver_ram.c.example` (I3) | — |
 | 10 | 🔴 | Round-trip HIL smoke test: create/set/commit/reset/get + `NVM_ERROR_NO_CHANGE` (I7) | **suite green** |
 | 11 | 🔴 | README foundation (T2, partial) | — |
@@ -160,6 +160,38 @@ than step 4.
 
 **Realistic scope note.** Steps 1–8 plus a green bench is a substantial but plausible sitting.
 Steps 9–12 are each their own piece of work; the plan does not assume they all land together.
+
+### Build status — steps 1–8 complete, 2026-08-17
+
+**SwitchTester builds clean: 0 errors, 0 warnings.** Step 8's `bench:` criterion is NOT met —
+nothing has been flashed or run. The pool has never been loaded on hardware.
+
+**Three real faults surfaced at first compile**, all worth recording because two of them were
+predicted by the design and then violated anyway:
+
+- **`nvm_media_t` was unreachable from the config header.** I12 established that anything the
+  config references must be defined *above* the include point, and the driver externs of I3
+  reference `nvm_media_t` — which had been placed in Part B. Fixed by moving `nvm_media_t`, the
+  three callback typedefs and `nvm_init_policy_t` into Part A, where they belong: none depends
+  on a configuration value. **Only `nvm_header_t` genuinely requires Part B**, because it embeds
+  `NVM_LABEL_MAX_LENGTH`. Worth stating as the rule for future additions.
+- **`#if NVM_ENABLE_INTERNAL_MALLOC` was evaluated before the config header defined it**, so
+  `<stdlib.h>` was silently dropped and `malloc`/`free` fell back to implicit declarations. Any
+  test of a config symbol must sit *after* `#include "nvmparams.h"`.
+- **A latent bug in the legacy flash driver** (adds to I9's list). `HAL_FLASHEx_Erase()` requires
+  `Banks` to be set and its `Page` is **bank-relative**, 0..(`FLASH_PAGE_NB` - 1). The old
+  `FLASH_PAGE()` macro produced an *absolute* index — 255 for a pool at `0x807F800` — and left
+  `Banks` zero-initialised, which is out of range on a dual-bank G0B1. The replacement derives
+  bank and bank-relative page from the address, guarded on `FLASH_BANK_2` so single- and
+  dual-bank configurations of the same part both work with no `#define` to keep in sync.
+
+**Also landed in step 8**, from I9: page count derived from the transfer size rather than
+hardcoded `NbPages = 1`, and the source copied into a local `uint64_t` with a `0xFF` tail pad
+instead of being cast through a masked pointer.
+
+**Not yet verified:** anything requiring hardware. The ID renumbering means the existing pool
+will not be recognised and will reformat to defaults on first boot — expected, and the debug
+menu's `[N]` pool-erase command is the fallback if it does not clear cleanly.
 
 ---
 
