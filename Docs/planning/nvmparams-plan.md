@@ -154,8 +154,8 @@ than step 4.
 | 6 | 🟢 | Checked wrappers over `_unchecked` internals + `nvmparams_internal.h` (D8); commit-timer accessors (I14); `u32_write_count` monotonic (S5) | — |
 | 7 | 🟢 | `x_nvm_list()` out to `nvm_list.c.example` + `nvm_list.h` (I13); call sites updated | **build green** |
 | 8 | 🟢 | `nvm_driver_stm_flash.c.example`; SwitchTester config literal using `_nvm_start` (I1); `NbPages` and doubleword fixes (I9) | **bench: pool loads, commits, survives reset** |
-| 9 | 🔴 | `nvm_driver_ram.c.example` (I3) | — |
-| 10 | 🔴 | Round-trip HIL smoke test: create/set/commit/reset/get + `NVM_ERROR_NO_CHANGE` (I7) | **suite green** |
+| 9 | 🟢 | `nvm_driver_ram.c.example` (I3) | — |
+| 10 | 🟢 | Round-trip HIL smoke test: create/set/commit/reset/get + `NVM_ERROR_NO_CHANGE` (I7) | **suite green** |
 | 11 | 🔴 | README foundation (T2, partial) | — |
 | 12 | 🔴 | Back-port the module — **not** the tests — to Skeleton (T3, partial) | **phase 1 complete** |
 
@@ -190,7 +190,39 @@ predicted by the design and then violated anyway:
 hardcoded `NbPages = 1`, and the source copied into a local `uint64_t` with a `0xFF` tail pad
 instead of being cast through a masked pointer.
 
-**Not yet verified:** anything requiring hardware. The ID renumbering means the existing pool
+### Bench + suite status — steps 9 and 10 complete, 2026-08-17
+
+**nvmparams HIL suite: 28/28 passing. Existing acon suite: 47/47, no regression.**
+
+The suite runs against a second pool (`g_x_nvm_test`) backed by the RAM driver, never the
+flash pool — so it can corrupt media, inject bus faults and re-init repeatedly at no risk to
+real parameters and no flash wear. It is also the only way the error paths are reachable at
+all: a real flash part cannot be asked to fail on cue.
+
+**Two genuine findings, both caught by tests written against the documented contract rather
+than against the code:**
+
+**1. `NVM_ERROR_OBJECT_EXISTS` was declared, documented and never returned.**
+`x_nvm_create()` returned `NVM_ERROR_NONE` whether it created an object or found one already
+present — while its own doc block promised `OBJECT_EXISTS`. Long-standing legacy behaviour, not
+introduced by this rework. **Fixed** (user: *"If there's a bonafide inconsistency in the usage
+of OBJECT_EXISTS, then it should be corrected... this sort of issue is what the code review is
+supposed to catch and fix"*). All three existing call sites discard the result, and the mirror
+does little error checking on nvmparams calls, so the behavioural change is low risk. It gives
+an application a way to detect a first boot, or whether a provisioning step has already run.
+
+**2. A reformat resets `u32_write_count`, and that is now the DECIDED behaviour** rather than an
+oversight. S5 said the count is monotonic and never reset; formatting zero-wipes the pool, so it
+restarts at 1.
+
+Resolved in favour of keeping the wipe (user): carrying a possibly-corrupt count forward is the
+dangerous direction — a spuriously high value would win block selection forever — whereas a low
+one merely loses until it is rewritten. **What actually matters for wear levelling is that every
+block ends up at the SAME count after a reformat, which a full wipe makes true by construction.**
+The cost is that the count is not a lifetime write total across reformats. The test now asserts
+the restart rather than monotonicity across it.
+
+**Not yet verified:** anything requiring hardware beyond what the suites cover. The ID renumbering means the existing pool
 will not be recognised and will reformat to defaults on first boot — expected, and the debug
 menu's `[N]` pool-erase command is the fallback if it does not clear cleanly.
 
@@ -1253,8 +1285,15 @@ pieces of work.
 **To confirm during implementation:** that the current code actually increments it on commit
 and does not reset it on reformat.
 
-**Resolution (user, locked):** phase 1 makes it monotonic, never reset, incremented on every
-commit.
+**Resolution (user, locked):** phase 1 makes it monotonic within a pool's life, incremented on
+every commit, never reset by anything except a reformat.
+
+**Refined 2026-08-17 after the HIL suite caught the edge:** a reformat DOES restart the count,
+because `x_nvm_format_block()` zero-wipes the pool. That is deliberate. Preserving a count read
+from corrupt media is the dangerous direction — a spuriously high value would win block
+selection permanently — while a restarted one simply loses until rewritten. The invariant wear
+levelling actually needs is that **all blocks share the same count after a reformat**, which the
+wipe guarantees by construction. Accepted cost: the count is not a lifetime write total.
 
 ### S6 — Redundant commit after a change-and-revert *(deferred)*
 
