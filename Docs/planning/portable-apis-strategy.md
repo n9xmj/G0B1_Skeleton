@@ -32,8 +32,9 @@ subdirectory, to be reused across STM32 projects:
   FIFO (16-bit ID + 16-bit size + payload), lock-free for single-producer/single-consumer
   with **no interrupt masking**, optional per-queue lock function pair for multiple
   producers. C standard library only — the strictest dependency profile of any module here.
-  Designed, built, bench-verified (19/19 HIL, incl. a true-ISR producer soak and a
-  dropped-event counter reconciled against an independent ISR tally) and documented
+  Designed, built, bench-verified (20/20 HIL, incl. a true-ISR producer soak and a
+  dropped-event and successful-put counter pair, each reconciled against an
+  independent ISR tally) and documented
   in one session. Decision log lives with the work that produced it, in SwitchTester's
   `Docs/planning/event-queue-plan.md`.
 - **stdio retarget** — CANDIDATE, not yet a module. The three projects have diverged
@@ -167,7 +168,7 @@ with Skeleton's.
 | `menusystem` | yes | yes | yes | `App/menusystem/` in all three, byte-identical (reconciled 2026-08-14); canonical is LED_Strip's `x_type`/`c_key`/`pfn_` naming + Doxygen + option-bitfield (backlog 5) |
 | `stdio_retarget` | yes | yes | **not yet, deferred** | not a vendored module anywhere yet; LED_Strip uses `syscalls_vfs.c` + `__io_*`. Assessed in S4 (`logging-api-plan.md`); LED_Strip-side plan and consumer audit in that project's `Docs/planning/stdio-retarget-migration-plan.md`. Behind 7a |
 | `nvmparams` | yes | yes | **not yet** | **phase 1 only — wear levelling unbuilt.** Landed 2026-08-18 in both (SwitchTester's via branch merge 2026-08-27); all ten vendored files content-identical, Skeleton CRLF / SwitchTester LF being line-ending noise. LED_Strip introduction is phase-2 work (T3 in `nvmparams-plan.md`) |
-| `event_queue` | yes* | yes | **not yet** | *Skeleton carries it **wired but unused**: compiled and include-pathed, no queues created and nothing referencing it, so `--gc-sections` keeps it out of the image entirely (verified BOTH ways: 0 event_queue symbols in the linked ELF as shipped, and all 9 public functions present once a temporary probe referenced them, costing +1056 B text and +48 B bss per handle). Byte-identical with SwitchTester's (re-vendored 2026-08-27 with the S8 drop counter; both configs still build 0/0 and the image is still untouched) |
+| `event_queue` | yes* | yes | **not yet** | *Skeleton carries it **wired but unused**: compiled and include-pathed, no queues created and nothing referencing it, so `--gc-sections` keeps it out of the image entirely (verified BOTH ways: 0 event_queue symbols in the linked ELF as shipped, and all 9 public functions present once a temporary probe referenced them, costing +1056 B text and +48 B bss per handle). Byte-identical with SwitchTester's (re-vendored 2026-08-27 with the S8/S9 drop and put counters; both configs still build 0/0 and the image is still untouched) |
 
 **`automation_console` in LED_Strip is DEFERRED, with long-term intent to migrate**
 (user, 2026-08-12). It is not a permanent exception, and it is not an oversight either.
