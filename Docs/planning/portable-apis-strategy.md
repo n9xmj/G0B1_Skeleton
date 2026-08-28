@@ -21,10 +21,13 @@ subdirectory, to be reused across STM32 projects:
   implementation of the conventions below** — the first module built to the finished
   port model. Full decision log:
   [`logging-api-plan.md`](logging-api-plan.md).
-- **nvmparams** — DONE 2026-08-27. Vendored `App/nvmparams/` with adopter-supplied storage
-  drivers; phase 1 complete and adopted in Skeleton and SwitchTester. Wear levelling is
-  phase 2 and **not built** — only the inert config/struct placeholders (I6). Full decision
-  log: [`nvmparams-plan.md`](nvmparams-plan.md).
+- **nvmparams** — **PHASE 1 DONE 2026-08-18**, phase 2 open. Vendored `App/nvmparams/` with
+  adopter-supplied storage drivers, adopted in Skeleton and SwitchTester (SwitchTester's
+  copy sat on `feature/nvmparams-vendorize` until it was merged to `main` 2026-08-27; the
+  two trees are content-identical). **Not finished:** wear levelling is phase 2 and is
+  **not built** — only the inert config/struct placeholders (I6). Re-vendoring in either
+  direction once it lands is expected and cheap. Full decision log:
+  [`nvmparams-plan.md`](nvmparams-plan.md).
 - **event_queue** — DONE 2026-08-27. Vendored `App/event_queue/`: a variable-length event
   FIFO (16-bit ID + 16-bit size + payload), lock-free for single-producer/single-consumer
   with **no interrupt masking**, optional per-queue lock function pair for multiple
@@ -162,7 +165,7 @@ with Skeleton's.
 | `automation_console` | yes | yes | **not yet, deferred** | long-term intent to migrate; blocked on the host-script cost, see below |
 | `menusystem` | yes | yes | yes | `App/menusystem/` in all three, byte-identical (reconciled 2026-08-14); canonical is LED_Strip's `x_type`/`c_key`/`pfn_` naming + Doxygen + option-bitfield (backlog 5) |
 | `stdio_retarget` | yes | yes | **not yet, deferred** | not a vendored module anywhere yet; LED_Strip uses `syscalls_vfs.c` + `__io_*`. Assessed in S4 (`logging-api-plan.md`); LED_Strip-side plan and consumer audit in that project's `Docs/planning/stdio-retarget-migration-plan.md`. Behind 7a |
-| `nvmparams` | yes | yes | **not yet** | phase 1 landed 2026-08-27 in both; content-identical (Skeleton CRLF / SwitchTester LF — line-ending noise only). LED_Strip introduction is phase-2 work (T3 in `nvmparams-plan.md`) |
+| `nvmparams` | yes | yes | **not yet** | **phase 1 only — wear levelling unbuilt.** Landed 2026-08-18 in both (SwitchTester's via branch merge 2026-08-27); all ten vendored files content-identical, Skeleton CRLF / SwitchTester LF being line-ending noise. LED_Strip introduction is phase-2 work (T3 in `nvmparams-plan.md`) |
 | `event_queue` | yes* | yes | **not yet** | *Skeleton carries it **wired but unused**: compiled and include-pathed, no queues created and nothing referencing it, so `--gc-sections` keeps it out of the image entirely (0 symbols in the linked ELF, verified). Byte-identical with SwitchTester's |
 
 **`automation_console` in LED_Strip is DEFERRED, with long-term intent to migrate**
