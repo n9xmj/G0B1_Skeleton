@@ -49,7 +49,15 @@ nothing else. The compile-time fold was measured, not assumed — a `QUIET` buil
 guarded code *and* its format-string literals from `.rodata`. See D1/S3 in
 [`logging-api-plan.md`](logging-api-plan.md).
 
-## 3. nvmparams — vendored module + pluggable storage drivers
+## 3. nvmparams — vendored module + pluggable storage drivers — ✅ PHASE 1 DONE 2026-08-27
+
+> **Status update.** Phase 1 shipped: `App/nvmparams/` is a vendored module with
+> adopter-supplied storage drivers, adopted in Skeleton and SwitchTester and
+> bench-verified (SwitchTester HIL 28/28, against both a RAM driver and a real W25Q128).
+> **Wear levelling is phase 2 and is NOT built** — only the inert config/struct
+> placeholders (I6). The live board is [`nvmparams-plan.md`](nvmparams-plan.md); it, not
+> this section, is now the source of truth. **Everything below is the original
+> cold-start brief, kept for its rationale and measurements — read it as history.**
 
 **NEXT BIG THING, and it gets its OWN SESSION** (user, 2026-08-12). The user is doing
 high-level design thinking first and will relay decisions at the start of that session.

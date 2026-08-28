@@ -1,0 +1,50 @@
+/******************************************************************************
+ * event_queue_config.h.example
+ *
+ * Configuration template for the vendored event_queue module.
+ *
+ * TO ADOPT: copy this file to your application include directory as
+ * event_queue_config.h and adjust. Do not edit the copy inside the module
+ * directory, and do not #include the config directly -- event_queue.h pulls
+ * it in for you and is the only header the application needs.
+ ******************************************************************************/
+
+#ifndef EVENT_QUEUE_H_INSIDE
+#error "Do not include event_queue_config.h directly -- include event_queue.h instead."
+#endif
+
+#ifndef EVENT_QUEUE_CONFIG_H
+#define EVENT_QUEUE_CONFIG_H
+
+/*=============================================================================
+ * 1. ALLOCATION
+ *===========================================================================*/
+
+/* Allow x_event_queue_create() to allocate the ring buffer when the config
+ * supplies pv_buffer = NULL. Set to 0 to compile the allocator out entirely
+ * (the module then never references any allocator and links without a heap);
+ * a NULL buffer becomes a configuration error instead, and every queue must
+ * be given caller-owned storage. */
+#define EVENT_QUEUE_ENABLE_MALLOC       1
+
+/* Which allocator the internal-buffer path uses. Undefined here, the module
+ * falls through to the C library's malloc()/free(). To route it elsewhere --
+ * an RTOS heap, a pool allocator -- define both macros AND add whatever
+ * #include makes the alternative visible, e.g. for FreeRTOS:
+ *
+ *   #include "FreeRTOS.h"
+ *   #define EVENT_QUEUE_MALLOC(u32_size)    pvPortMalloc(u32_size)
+ *   #define EVENT_QUEUE_FREE(pv)            vPortFree(pv)
+ */
+
+/*=============================================================================
+ * 2. GEOMETRY
+ *===========================================================================*/
+
+/* Ring size, in bytes, used when the config's u32_size is 0 (including the
+ * all-defaults NULL-config create). Each queued record costs
+ * sizeof(event_queue_header_t) (4 bytes) + payload, rounded up to a multiple
+ * of 4. Must be a multiple of 4 and at least EVENT_QUEUE_SIZE_MIN (8). */
+#define EVENT_QUEUE_DEFAULT_SIZE        256
+
+#endif /* EVENT_QUEUE_CONFIG_H */
