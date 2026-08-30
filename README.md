@@ -20,6 +20,19 @@ project — strip nothing, just add your code on top.
 
 ~20 KB flash / ~3.5 KB RAM at `-Og`.
 
+## Adopting this skeleton — change these first
+
+- **Give the NVM pool a project-specific label.** `x_nvm_param_config.p_c_label`
+  in `app_main.c` ships as `"UNNAMED"` — a deliberate placeholder. Every project
+  that can be loaded onto the same board needs a *different* label, and the
+  application should check it after pool init and wipe a pool that does not match.
+
+  The `.nvmdata` section is `NOLOAD`, so the pool survives reflashing. On a shared
+  board this firmware will otherwise be handed a pool written by another project —
+  valid signature, self-consistent, entirely foreign IDs. Neither the signature nor
+  a CRC detects that; only the label carries provenance. It has already cost a bench
+  session once.
+
 ## Layout
 
 | Path | Purpose |

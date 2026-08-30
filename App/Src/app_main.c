@@ -79,8 +79,24 @@ extern uint32_t _nvm_start;         /* provided by the linker script */
 
 static const nvm_pool_config_t x_nvm_param_config =
 {
-    /* Stored in the pool header; informational only. */
-    .p_c_label       = "PARAMS",
+    /*  >>> CHANGE THIS WHEN YOU ADOPT THE SKELETON <<<
+     *
+     * Stored in the pool header. nvmparams itself never makes a decision on
+     * it -- but the application should: give every project that can be loaded
+     * onto the same board a DIFFERENT label, and check it after pool init.
+     *
+     * Why it matters: the .nvmdata section is NOLOAD, so the pool survives
+     * reflashing. A board shared between two projects will happily hand this
+     * firmware a pool written by the other one -- valid signature, consistent
+     * contents, completely foreign IDs. Neither the signature nor a CRC can
+     * catch that; only the label carries provenance. Reading another project's
+     * pool as your own is not hypothetical, it has already cost a bench
+     * session on this hardware.
+     *
+     * "UNNAMED" is a deliberate placeholder, not a default worth keeping: it
+     * is meant to look unfilled. Max NVM_LABEL_MAX_LENGTH (16) chars.
+     */
+    .p_c_label       = "UNNAMED",
 
     /* Storage driver. Swap these two for another example, or your own. */
     .pfn_read        = x_nvm_drv_stm_flash_read,
