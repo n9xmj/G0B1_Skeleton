@@ -22,16 +22,28 @@ project — strip nothing, just add your code on top.
 
 ## Adopting this skeleton — change these first
 
-- **Give the NVM pool a project-specific label.** `x_nvm_param_config.p_c_label`
-  in `app_main.c` ships as `"UNNAMED"` — a deliberate placeholder. Every project
-  that can be loaded onto the same board needs a *different* label, and the
-  application should check it after pool init and wipe a pool that does not match.
+- **Give the NVM pool a project-specific label.** `NVM_POOL_LABEL` in
+  `device_config.h` ships as `"UNNAMED"` — a deliberate placeholder. Every project
+  that can be loaded onto the same board needs a *different* one. Setting it to
+  `PRODUCT_NAME` is a reasonable choice, since a fork then inherits a distinct
+  label for free.
 
-  The `.nvmdata` section is `NOLOAD`, so the pool survives reflashing. On a shared
-  board this firmware will otherwise be handed a pool written by another project —
-  valid signature, self-consistent, entirely foreign IDs. Neither the signature nor
-  a CRC detects that; only the label carries provenance. It has already cost a bench
-  session once.
+  **The check is already wired up.** `v_param_init()` compares the stored label
+  against `NVM_POOL_LABEL` after pool init and before any `x_nvm_get()`; a pool
+  that does not match is wiped and rebuilt from defaults. While the placeholder is
+  still in place it also logs a warning at boot, so an unadopted clone says so
+  rather than waiting to be noticed.
+
+  Why it matters: the `.nvmdata` section is `NOLOAD`, so the pool survives
+  reflashing. On a shared board this firmware would otherwise be handed a pool
+  written by another project — valid signature, self-consistent, entirely foreign
+  IDs. Neither the signature nor a CRC detects that, and no init policy helps: a
+  foreign pool is perfectly *valid*. Only the label carries provenance. It has
+  already cost a bench session once.
+
+  Note the consequence on a shared bench: two projects alternating on one board
+  will each wipe the other's pool at boot. That is intended — a foreign pool is
+  not worth preserving — but it means parameters do not survive a swap.
 
 ## Layout
 

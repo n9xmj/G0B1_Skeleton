@@ -43,6 +43,36 @@
 #define PRODUCT_NAME                    "G0B1_Skeleton"
 #define PLATFORM_NAME                   "NUCLEO-G0B1RE"
 
+//------------------------------------------------------------------------------
+// NVM pool ownership label.
+//
+//  >>> CHANGE THIS WHEN YOU ADOPT THE SKELETON <<<
+//
+// Written into the pool header and CHECKED at init: a pool whose label is not
+// ours is wiped and rebuilt from defaults (see u8_nvm_label_matches() in
+// app_main.c). Give every project that can be loaded onto the same board a
+// DIFFERENT label.
+//
+// Why it matters: the .nvmdata section is NOLOAD, so the pool survives
+// reflashing. A board shared between two projects will otherwise hand this
+// firmware a pool written by the other one -- valid signature, self-consistent
+// contents, completely foreign IDs. Neither the signature nor a CRC can detect
+// that; only the label carries provenance.
+//
+// "UNNAMED" is a deliberate placeholder, not a default worth keeping: it is
+// meant to look unfilled, and the check logs a loud warning at boot for as long
+// as it is left in place. Setting it to PRODUCT_NAME is a reasonable choice --
+// then a fork inherits a distinct label for free.
+//
+// At most NVM_LABEL_MAX_LENGTH (16) characters; asserted in app_main.c.
+//------------------------------------------------------------------------------
+
+#define NVM_POOL_LABEL                  "UNNAMED"
+
+// The value NVM_POOL_LABEL ships with. Only used to notice that nobody has
+// changed it yet -- leave this alone when you set a real label above.
+#define NVM_POOL_LABEL_UNSET            "UNNAMED"
+
 #if defined(DEBUG)
 #define BUILD_CONFIG                    "DEBUG"
 #else 

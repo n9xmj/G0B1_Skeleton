@@ -16,6 +16,8 @@
  * INCLUDES
  *==========================================================================*/
 
+#include <string.h>                 /* memcmp/memcpy/memset -- pool label check */
+
 #include "device_config.h"          /* stdint/stdio, main.h, platform.h, globals.h */
 #include "tim.h"                     /* PERIODIC_INT_TIMER_HANDLE (htim14) */
 #include "utils.h"
@@ -79,24 +81,11 @@ extern uint32_t _nvm_start;         /* provided by the linker script */
 
 static const nvm_pool_config_t x_nvm_param_config =
 {
-    /*  >>> CHANGE THIS WHEN YOU ADOPT THE SKELETON <<<
-     *
-     * Stored in the pool header. nvmparams itself never makes a decision on
-     * it -- but the application should: give every project that can be loaded
-     * onto the same board a DIFFERENT label, and check it after pool init.
-     *
-     * Why it matters: the .nvmdata section is NOLOAD, so the pool survives
-     * reflashing. A board shared between two projects will happily hand this
-     * firmware a pool written by the other one -- valid signature, consistent
-     * contents, completely foreign IDs. Neither the signature nor a CRC can
-     * catch that; only the label carries provenance. Reading another project's
-     * pool as your own is not hypothetical, it has already cost a bench
-     * session on this hardware.
-     *
-     * "UNNAMED" is a deliberate placeholder, not a default worth keeping: it
-     * is meant to look unfilled. Max NVM_LABEL_MAX_LENGTH (16) chars.
-     */
-    .p_c_label       = "UNNAMED",
+    /* Stored in the pool header, and CHECKED at init -- see
+     * u8_nvm_label_matches() below. nvmparams itself never decides on it; the
+     * application does. Set NVM_POOL_LABEL in device_config.h, which is also
+     * where the reasoning lives. */
+    .p_c_label       = NVM_POOL_LABEL,
 
     /* Storage driver. Swap these two for another example, or your own. */
     .pfn_read        = x_nvm_drv_stm_flash_read,
@@ -122,6 +111,71 @@ static const nvm_pool_config_t x_nvm_param_config =
 //  .x_init_policy   = NVM_INIT_FORMAT_IF_BLANK,    /* format blank, refuse corrupt */
 };
 
+_Static_assert(sizeof(NVM_POOL_LABEL) - 1U <= NVM_LABEL_MAX_LENGTH,
+               "NVM_POOL_LABEL does not fit the pool header's label field");
+
+/*
+ * Does this pool carry OUR label?
+ *
+ * nvmparams treats the label as informational and never decides on it, so
+ * provenance is the application's job. Nothing else can do it: a foreign pool
+ * is perfectly VALID -- right signature, self-consistent contents -- so neither
+ * the init policy nor a CRC can tell it apart from ours. Only the label can.
+ *
+ * Compares the whole field, not a prefix: the label is written with strncpy()
+ * bounded by the field width, which zero-fills the tail, so a full-field
+ * compare is well defined and rejects a label that merely shares a prefix. A
+ * garbage or truncated label fails it too, which is what we want.
+ *
+ * Takes the pool explicitly rather than assuming "the" pool -- nvmparams
+ * manages several across several devices.
+ */
+static uint8_t u8_nvm_label_matches(const nvm_pool_t *p_x_pool,
+                                    const char *p_c_expected)
+{
+    const nvm_header_t *p_x_header;
+    char   c_expected[NVM_LABEL_MAX_LENGTH];
+    size_t sz_len;
+
+    if ((p_x_pool == NULL) || (p_x_pool->p_v_data == NULL))
+    {
+        return 1U;              /* nothing to judge -- do not destroy anything */
+    }
+
+    sz_len = strlen(p_c_expected);
+    if (sz_len > NVM_LABEL_MAX_LENGTH)
+    {
+        sz_len = NVM_LABEL_MAX_LENGTH;
+    }
+
+    memset(c_expected, 0, sizeof(c_expected));
+    memcpy(c_expected, p_c_expected, sz_len);
+
+    p_x_header = (const nvm_header_t *) p_x_pool->p_v_data;
+
+    return (memcmp(p_x_header->c_label, c_expected, NVM_LABEL_MAX_LENGTH) == 0)
+           ? 1U : 0U;
+}
+
+/*
+ * Wipe a pool whose label says it is not ours, and rebuild it from defaults.
+ *
+ * A foreign pool is explicitly not worth preserving. Blanking the media to 0xFF
+ * and re-initialising makes the second init see blank media and format it with
+ * our label. Release before re-init because this pool allocates its RAM buffer
+ * internally; re-initialising over a live handle would leak the first one.
+ */
+static void v_nvm_reclaim_foreign_pool(void)
+{
+    LOGCT(LOG_NVM, "pool label is not \"%s\" -- foreign pool, wiping", NVM_POOL_LABEL);
+
+    memset(g_x_nvm_param.p_v_data, 0xFF, g_x_nvm_param.u32_size);
+    x_nvm_write(&g_x_nvm_param);
+
+    x_nvm_pool_release(&g_x_nvm_param);
+    (void) x_nvm_pool_init(&g_x_nvm_param, &x_nvm_param_config);
+}
+
 void v_param_init(void)
 {
     /* Test against NVM_ERROR_NONE, never "< 0" and never against a list of
@@ -129,6 +183,24 @@ void v_param_init(void)
      * POOL_FORMATTED means the media was blank and nothing was lost;
      * POOL_REFORMATTED would mean data was destroyed. */
     (void) x_nvm_pool_init(&g_x_nvm_param, &x_nvm_param_config);
+
+    /* Provenance check, before ANY x_nvm_get(). A pool that is valid but was
+     * written by another project on this board would otherwise be read as ours,
+     * silently supplying that project's values for our IDs. */
+    if (!u8_nvm_label_matches(&g_x_nvm_param, NVM_POOL_LABEL))
+    {
+        v_nvm_reclaim_foreign_pool();
+    }
+
+    /* Nobody has set a project-specific label yet. Say so loudly rather than
+     * relying on the adopter having read a comment: while the placeholder is in
+     * place this pool is indistinguishable from any other unadopted clone's,
+     * which is exactly the collision the check exists to prevent. */
+    if (strcmp(NVM_POOL_LABEL, NVM_POOL_LABEL_UNSET) == 0)
+    {
+        LOGCT(LOG_NVM, "NVM pool label is still \"%s\" -- set NVM_POOL_LABEL "
+                       "in device_config.h", NVM_POOL_LABEL_UNSET);
+    }
 
     /* Example persistent parameter. Replace / extend for real use. */
     u32_test_param_1 = 0xDEAD;
