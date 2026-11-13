@@ -1,4 +1,4 @@
-# Automation console — protocol reference
+# Automation console — protocol reference (`acon-protocol.md`)
 
 The **acon** is a machine-facing command console: a second personality on the same UART the
 human debug menu uses, entered by a sentinel byte, speaking a line-oriented request/response
@@ -301,7 +301,8 @@ traffic.
 
 ## Documenting a project's ops
 
-Each adopting project keeps its own `Docs/acon-reference.md` (or a section of its docs) that:
+Each adopting project copies this file unchanged as `Docs/acon-protocol.md` and keeps its own
+`Docs/acon-reference.md` (or a section of its docs) that:
 
 1. States the project's **wire settings** (UART, baud, connector) and its config values where
    they differ from the defaults above.

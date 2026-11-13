@@ -8,7 +8,7 @@ drives the instrument, which includes ordinary operation.
 This file is **how to drop the module into a project**. For *why* it is shaped this way,
 see [`portable-apis-strategy.md`](../../Docs/planning/portable-apis-strategy.md). The
 **protocol reference** (session, frame grammar, builtins, host driver, gotchas) is
-[`Docs/acon-reference.md`](../../Docs/acon-reference.md), and the host-side Python driver is
+[`Docs/acon-protocol.md`](../../Docs/acon-protocol.md), and the host-side Python driver is
 [`scripts/hil/acon.py`](../../scripts/hil/acon.py). The protocol's full rationale (decision
 log) lives in SwitchTester, where the console was developed:
 [`Docs/planning/automation-console-plan.md`](https://github.com/n9xmj/SwitchTester/blob/main/Docs/planning/automation-console-plan.md).

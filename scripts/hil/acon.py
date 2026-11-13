@@ -2,7 +2,7 @@
 acon.py -- host-side driver for the automation console (acon).
 
 Project-neutral: speaks the SCRIPT-mode protocol described in
-Docs/acon-reference.md. Enter on 0xDA, leave on 0xA5, send one command per
+Docs/acon-protocol.md. Enter on 0xDA, leave on 0xA5, send one command per
 CR-terminated line, read one framed response. A project's own ops are just
 strings passed to command(); nothing here knows any domain opcode.
 
